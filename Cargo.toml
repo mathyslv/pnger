@@ -1,0 +1,10 @@
+[package]
+name = "pnger"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+thiserror = "2"
+anyhow = "1.0"
+png = "0.17.16"
