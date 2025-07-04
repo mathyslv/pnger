@@ -1,0 +1,51 @@
+[package]
+name = "pnger"
+version = "0.1.2"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+keywords = ["rust", "png", "steganography", "evasion"]
+authors = ["mathyslv <mathys.lv@hotmail.com>"]
+description = "Cross-platform PNG steganography tool for embedding and extracting payloads"
+homepage = "https://github.com/mathyslv/pnger"
+repository = "https://github.com/mathyslv/pnger"
+exclude = [
+    "/.github/",
+    "/docs/",
+    "/examples/*.png",
+    "*.log"
+]
+rust-version = "1.85.1"
+
+[package.metadata]
+msrv = "1.85.1"
+
+[[bin]]
+name = "pnger"
+required-features = ["bin"]
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+thiserror = "2"
+anyhow = "1.0"
+png = "0.17.16"
+argon2 = "0.5.3"
+hex = "0.4"
+getrandom = "0.3.3"
+rand_chacha = "0.9.0"
+rand = "0.9.1"
+bitflags = "2.9.1"
+binrw = "0.15"
+crc32fast = "1.4"
+log = { version = "0.4.27", features = ["kv"], optional = true }
+env_logger = { version = "0.11.8", features = ["kv"], optional = true }
+
+[features]
+default = ["log"]
+log = ["dep:log"]
+bin = ["log", "dep:env_logger"]
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
