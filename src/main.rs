@@ -1,20 +1,11 @@
 mod cli;
 
 use anyhow::{Context, Result};
-use pnger::embed_payload_from_file_with_mode;
+use pnger::{embed_payload_from_file_with_mode, extract_payload_from_file_with_mode};
 use std::fs;
 use std::io::{self, Write};
 
 use crate::cli::Cli;
-
-/// Validate command line arguments
-fn validate_args(args: &Cli) -> Result<()> {
-    if let Err(msg) = args.validate_output() {
-        eprintln!("{}", msg);
-        std::process::exit(1);
-    }
-    Ok(())
-}
 
 /// Embed payload into PNG using specified mode
 fn embed_payload(args: &Cli, payload_data: &[u8]) -> Result<Vec<u8>> {
@@ -26,6 +17,18 @@ fn embed_payload(args: &Cli, payload_data: &[u8]) -> Result<Vec<u8>> {
         args.mode.into(),
     )
     .context("Failed to embed payload into PNG")
+}
+
+/// Extract payload from PNG using specified mode
+fn extract_payload(args: &Cli) -> Result<Vec<u8>> {
+    extract_payload_from_file_with_mode(
+        args.input
+            .to_str()
+            .context("Input file path contains invalid UTF-8")?,
+        args.mode.into(),
+    )
+    .context("Failed to embed payload into PNG")
+    .map(|(payload, _)| payload)
 }
 
 /// Write result to specified output
@@ -46,11 +49,15 @@ fn write_output(args: &Cli, result: &[u8]) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let args = Cli::parse_args();
-    validate_args(&args)?;
-    let payload_data = fs::read(&args.payload)
-        .with_context(|| format!("Failed to read payload file '{}'", args.payload.display()))?;
-    let embedded = embed_payload(&args, &payload_data)?;
-    write_output(&args, &embedded)?;
+    let args = Cli::parse_and_validate()?;
+    let result = if args.extract {
+        extract_payload(&args)?
+    } else {
+        let payload_file = &args.payload.clone().expect("payload has to be specified");
+        let payload_data = fs::read(payload_file)
+            .with_context(|| format!("Failed to read payload file '{:?}'", payload_file))?;
+        embed_payload(&args, &payload_data)?
+    };
+    write_output(&args, &result)?;
     Ok(())
 }

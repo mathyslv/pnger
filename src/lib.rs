@@ -12,48 +12,50 @@ pub mod utils;
 
 // Re-exports for public API
 pub use error::PngerError;
-pub use strategy::{Mode, Strategy};
+pub use strategy::Mode;
 
 use io::read_file;
-use strategy::get_strategy;
 use utils::setup_png_encoder;
 
-/// Decode PNG and extract info
-fn decode_png_info(png_data: &[u8]) -> Result<(png::Reader<Cursor<&[u8]>>, png::Info), PngerError> {
-    let decoder = png::Decoder::new(Cursor::new(png_data));
-    let reader = decoder.read_info()?;
-    let info = reader.info().clone();
-    Ok((reader, info))
+use crate::strategy::lsb::LSBStrategy;
+
+/// Extract a payload from PNG data (memory-based API)
+///
+/// Takes PNG data as a byte array and extracts (previously embedded) payload data from it.
+/// This is the core function used internally by the file-based API.
+pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), PngerError> {
+    extract_payload_from_bytes_with_mode(png_data, Mode::default())
 }
 
-/// Read raw image data from PNG reader
-fn read_image_data(reader: &mut png::Reader<Cursor<&[u8]>>) -> Result<Vec<u8>, PngerError> {
-    let mut image_data = vec![0; reader.output_buffer_size()];
-    reader.next_frame(&mut image_data)?;
-    Ok(image_data)
+/// Extract a payload from PNG data with specified mode
+pub fn extract_payload_from_bytes_with_mode(
+    png_data: &[u8],
+    mode: Mode,
+) -> Result<(Vec<u8>, Vec<u8>), PngerError> {
+    let (mut reader, info) = decode_png_info(png_data)?;
+    let mut image_data = read_image_data(&mut reader)?;
+    let payload = match mode {
+        Mode::LSB => LSBStrategy::new(&mut image_data).extract_payload()?,
+    };
+    let original_png = encode_png_with_data(&info, &image_data)?;
+    Ok((payload, original_png))
 }
 
-/// Encode PNG with modified image data
-fn encode_png_with_data(info: &png::Info, image_data: &[u8]) -> Result<Vec<u8>, PngerError> {
-    let mut writer_buffer = BufWriter::new(Vec::new());
-    let encoder = setup_png_encoder(info, &mut writer_buffer)?;
-    
-    let mut writer = encoder.write_header()?;
-    writer.write_image_data(image_data)?;
-    writer.finish()?;
-    
-    writer_buffer.into_inner().map_err(|e| PngerError::IoError {
-        message: format!("Failed to extract buffer: {}", e)
-    })
+/// Extract a payload from a PNG file (file-based API)
+///
+/// Takes a file path to a PNG image and extracts the payload data from it.
+/// Handles file I/O internally and is the primary interface for most use cases.
+pub fn extract_payload_from_file(png_path: &str) -> Result<(Vec<u8>, Vec<u8>), PngerError> {
+    extract_payload_from_file_with_mode(png_path, Mode::default())
 }
 
-/// Embed payload using specified strategy
-fn embed_with_strategy(
-    image_data: &mut [u8],
-    payload_data: &[u8],
-    strategy: Box<dyn Strategy>,
-) -> Result<(), PngerError> {
-    strategy.embed(image_data, payload_data)
+/// Extract a payload from a PNG file with specified mode
+pub fn extract_payload_from_file_with_mode(
+    png_path: &str,
+    mode: Mode,
+) -> Result<(Vec<u8>, Vec<u8>), PngerError> {
+    let png_data = read_file(png_path)?;
+    extract_payload_from_bytes_with_mode(&png_data, mode)
 }
 
 /// Embed a payload into PNG data (memory-based API)
@@ -75,10 +77,9 @@ pub fn embed_payload_from_bytes_with_mode(
 ) -> Result<Vec<u8>, PngerError> {
     let (mut reader, info) = decode_png_info(png_data)?;
     let mut image_data = read_image_data(&mut reader)?;
-    
-    let strategy = get_strategy(mode);
-    embed_with_strategy(&mut image_data, payload_data, strategy)?;
-    
+    match mode {
+        Mode::LSB => LSBStrategy::new(&mut image_data).embed_payload(payload_data)?,
+    }
     encode_png_with_data(&info, &image_data)
 }
 
@@ -100,10 +101,40 @@ pub fn embed_payload_from_file_with_mode(
     embed_payload_from_bytes_with_mode(&png_data, payload_data, mode)
 }
 
+type DecodedPngInfo<'a> = Result<(png::Reader<Cursor<&'a [u8]>>, png::Info<'a>), PngerError>;
+
+/// Decode PNG and extract info
+fn decode_png_info(png_data: &[u8]) -> DecodedPngInfo {
+    let decoder = png::Decoder::new(Cursor::new(png_data));
+    let reader = decoder.read_info()?;
+    let info = reader.info().clone();
+    Ok((reader, info))
+}
+
+/// Read raw image data from PNG reader
+fn read_image_data(reader: &mut png::Reader<Cursor<&[u8]>>) -> Result<Vec<u8>, PngerError> {
+    let mut image_data = vec![0; reader.output_buffer_size()];
+    reader.next_frame(&mut image_data)?;
+    Ok(image_data)
+}
+
+/// Encode PNG with modified image data
+fn encode_png_with_data(info: &png::Info, image_data: &[u8]) -> Result<Vec<u8>, PngerError> {
+    let mut writer_buffer = BufWriter::new(Vec::new());
+    let encoder = setup_png_encoder(info, &mut writer_buffer)?;
+
+    let mut writer = encoder.write_header()?;
+    writer.write_image_data(image_data)?;
+    writer.finish()?;
+
+    writer_buffer.into_inner().map_err(|e| PngerError::IoError {
+        message: format!("Failed to extract buffer: {}", e),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use strategy::lsb::LSBStrategy;
 
     #[test]
     fn test_embed_payload_from_bytes() {
@@ -127,13 +158,5 @@ mod tests {
     fn test_mode_enum() {
         let mode = Mode::LSB;
         assert_eq!(mode, Mode::default());
-    }
-
-    #[test]
-    fn test_lsb_strategy() {
-        let strategy = LSBStrategy;
-        let image_data = vec![0xFF; 1000]; // Fake image data
-        let capacity = strategy.max_capacity(&image_data);
-        assert_eq!(capacity, (1000 - 32) / 8); // Should reserve 32 bits for length
     }
 }
