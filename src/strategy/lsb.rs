@@ -6,28 +6,33 @@ use crate::error::PngerError;
 pub struct LSBStrategy<'a> {
     index: usize,
     image_data: &'a mut [u8],
+    target_bit_index: u8,
 }
 
 impl<'a> LSBStrategy<'a> {
-    pub fn new(image_data: &'a mut [u8]) -> Self {
+    pub fn new(image_data: &'a mut [u8], target_bit_index: u8) -> Self {
         Self {
             index: 0,
             image_data,
+            target_bit_index,
         }
     }
 
-    fn embed_bit(carrier: u8, bit: u8) -> u8 {
-        (carrier & 0xFE) | (bit & 1)
+    fn embed_bit(target_bit_index: u8, carrier: u8, bit: u8) -> u8 {
+        let mask = !(1 << target_bit_index);
+        (carrier & mask) | ((bit & 1) << target_bit_index)
     }
 
-    fn extract_bit(carrier: u8) -> u8 {
-        carrier & 0x01
+    fn extract_bit(target_bit_index: u8, carrier: u8) -> u8 {
+        let mask = 1 << target_bit_index;
+        (carrier & mask) >> target_bit_index
     }
 
     fn write_u8(&mut self, byte: u8) {
         for bit_pos in 0..8 {
             let bit = byte >> bit_pos;
-            self.image_data[self.index] = Self::embed_bit(self.image_data[self.index], bit);
+            self.image_data[self.index] =
+                Self::embed_bit(self.target_bit_index, self.image_data[self.index], bit);
             self.index += 1;
         }
     }
@@ -39,10 +44,10 @@ impl<'a> LSBStrategy<'a> {
     }
 
     fn read_u8(&mut self) -> u8 {
-        (0..8).fold(0, |byte, _| {
-            let bit = Self::extract_bit(self.image_data[self.index]);
+        (0..8).fold(0, |byte, bit_index| {
+            let bit = Self::extract_bit(self.target_bit_index, self.image_data[self.index]);
             self.index += 1;
-            (byte << 1) | bit
+            (bit << bit_index) | byte
         })
     }
 
@@ -61,6 +66,8 @@ impl<'a> LSBStrategy<'a> {
             return Err(PngerError::PayloadTooLarge);
         }
 
+        println!(">> payload length is {}", payload_data.len());
+
         // Embed payload length first (4 bytes)
         self.write_u32(payload_data.len() as u32);
 
@@ -75,28 +82,15 @@ impl<'a> LSBStrategy<'a> {
     pub fn extract_payload(mut self) -> Result<Vec<u8>, PngerError> {
         // Embed payload length first (4 bytes)
         let payload_length = self.read_u32() as usize;
+        println!(">> payload length is {}", payload_length);
 
         let max_capacity = self.max_capacity(self.image_data);
         if payload_length > max_capacity {
             return Err(PngerError::PayloadTooLarge);
         }
 
-        println!(">>>> payload length is {}", payload_length);
-
-        for index in 0..payload_length {
-            let byte = self.read_u8();
-            print!("{}", byte as char);
-            if index % 8 == 0 && index > 0 {
-                println!();
-            }
-        }
-
-        // Embed payload data
-        // for &byte in payload_data {
-        // self.write_u8(byte);
-        // }
-
-        Ok(vec![])
+        let data = (0..payload_length).map(|_| self.read_u8()).collect();
+        Ok(data)
     }
 
     fn max_capacity(&self, image_data: &[u8]) -> usize {

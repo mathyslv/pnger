@@ -19,6 +19,8 @@ use utils::setup_png_encoder;
 
 use crate::strategy::lsb::LSBStrategy;
 
+pub const DEFAULT_LSG_TARGET_BIT_INDEX: u8 = 0;
+
 /// Extract a payload from PNG data (memory-based API)
 ///
 /// Takes PNG data as a byte array and extracts (previously embedded) payload data from it.
@@ -35,7 +37,9 @@ pub fn extract_payload_from_bytes_with_mode(
     let (mut reader, info) = decode_png_info(png_data)?;
     let mut image_data = read_image_data(&mut reader)?;
     let payload = match mode {
-        Mode::LSB => LSBStrategy::new(&mut image_data).extract_payload()?,
+        Mode::LSB => {
+            LSBStrategy::new(&mut image_data, DEFAULT_LSG_TARGET_BIT_INDEX).extract_payload()?
+        }
     };
     let original_png = encode_png_with_data(&info, &image_data)?;
     Ok((payload, original_png))
@@ -78,7 +82,8 @@ pub fn embed_payload_from_bytes_with_mode(
     let (mut reader, info) = decode_png_info(png_data)?;
     let mut image_data = read_image_data(&mut reader)?;
     match mode {
-        Mode::LSB => LSBStrategy::new(&mut image_data).embed_payload(payload_data)?,
+        Mode::LSB => LSBStrategy::new(&mut image_data, DEFAULT_LSG_TARGET_BIT_INDEX)
+            .embed_payload(payload_data)?,
     }
     encode_png_with_data(&info, &image_data)
 }
