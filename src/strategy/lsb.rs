@@ -1,20 +1,21 @@
 use std::io::Write;
 
+use super::LSBOptions;
 use crate::error::PngerError;
 
 /// LSB (Least Significant Bit) strategy implementation
 pub struct LSBStrategy<'a> {
     index: usize,
     image_data: &'a mut [u8],
-    target_bit_index: u8,
+    options: LSBOptions,
 }
 
 impl<'a> LSBStrategy<'a> {
-    pub fn new(image_data: &'a mut [u8], target_bit_index: u8) -> Self {
+    pub fn new(image_data: &'a mut [u8], options: LSBOptions) -> Self {
         Self {
             index: 0,
             image_data,
-            target_bit_index,
+            options,
         }
     }
 
@@ -31,8 +32,11 @@ impl<'a> LSBStrategy<'a> {
     fn write_u8(&mut self, byte: u8) {
         for bit_pos in 0..8 {
             let bit = byte >> bit_pos;
-            self.image_data[self.index] =
-                Self::embed_bit(self.target_bit_index, self.image_data[self.index], bit);
+            self.image_data[self.index] = Self::embed_bit(
+                self.options.target_bit_index,
+                self.image_data[self.index],
+                bit,
+            );
             self.index += 1;
         }
     }
@@ -45,7 +49,7 @@ impl<'a> LSBStrategy<'a> {
 
     fn read_u8(&mut self) -> u8 {
         (0..8).fold(0, |byte, bit_index| {
-            let bit = Self::extract_bit(self.target_bit_index, self.image_data[self.index]);
+            let bit = Self::extract_bit(self.options.target_bit_index, self.image_data[self.index]);
             self.index += 1;
             (bit << bit_index) | byte
         })
@@ -82,7 +86,6 @@ impl<'a> LSBStrategy<'a> {
     pub fn extract_payload(mut self) -> Result<Vec<u8>, PngerError> {
         // Embed payload length first (4 bytes)
         let payload_length = self.read_u32() as usize;
-        println!(">> payload length is {}", payload_length);
 
         let max_capacity = self.max_capacity(self.image_data);
         if payload_length > max_capacity {
