@@ -1,7 +1,10 @@
-*
-!.gitignore
-!Cargo.toml
-!Cargo.lock
-!README.md
-!src/
-!src/*
+# *
+# !.gitignore
+# !Cargo.toml
+# !Cargo.lock
+# !README.md
+# !src/
+# !src/*
+target/
+.claude/
+.serena/

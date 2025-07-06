@@ -9,6 +9,10 @@ A cross-platform command-line tool for embedding payloads within PNG files using
 ## Features
 
 - **LSB Steganography**: Embed data using Least Significant Bit manipulation
+- **LSB Customization**: Linear or random patterns with configurable bit targeting (0-7)
+- **Reproducible Patterns**: Use seeds and salts for deterministic embedding/extraction
+- **XOR Obfuscation**: Optional payload encryption with custom or default keys
+- **Bidirectional Operations**: Both embed and extract capabilities with parameter matching
 - **Multiple Output Formats**: Save to file or output raw binary data
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Fast & Efficient**: Optimized Rust implementation
@@ -49,22 +53,60 @@ Output to stdout for piping:
 pnger -i image.png -p data.json --raw > result.png
 ```
 
+### Advanced Examples
+
+Advanced LSB with reproducible random pattern:
+```bash
+pnger -i photo.png -p secret.txt -o output.png --lsb-seed "myseed" --lsb-salt "verylongsalt"
+```
+
+Linear LSB pattern for sequential embedding:
+```bash
+pnger -i image.png -p data.bin -o result.png --lsb-pattern linear
+```
+
+Target specific bit position (bit 2 instead of LSB):
+```bash
+pnger -i photo.png -p payload.json -o steganographic.png --lsb-bit-index 2
+```
+
+Add XOR obfuscation for extra security:
+```bash
+pnger -i image.png -p sensitive.txt -o encrypted.png --xor --xor-key "secretkey"
+```
+
+Extract with matching parameters:
+```bash
+pnger -x -i encrypted.png -o extracted.txt --lsb-seed "myseed" --lsb-salt "verylongsalt" --xor --xor-key "secretkey"
+```
+
 ### Command Line Options
 
 ```
-Usage: pnger [OPTIONS] --input <FILE> --payload <FILE>
+Usage: pnger [OPTIONS] --input <FILE>
 
 Options:
-  -i, --input <FILE>     Input PNG file
-  -p, --payload <FILE>   Payload file to embed
-  -o, --output <FILE>    Output file (write result to file)
-      --raw              Output raw binary data to stdout
-  -m, --mode <MODE>      Steganography mode to use [default: lsb]
-  -h, --help             Print help
-  -V, --version          Print version
+  -i, --input <FILE>              Input PNG file
+  -p, --payload <FILE>            Payload file to embed
+  -o, --output <FILE>             Output file (write result to file)
+      --raw                       Output raw binary data to stdout
+  -m, --mode <MODE>               Embedding mode to use [default: lsb]
+  -x, --extract                   Extract payload from input file
+      --xor                       Toggle payload obfuscation with XOR algorithm
+      --xor-key <XOR_KEY>         Key to use for XOR obfuscation
+      --lsb-pattern <PATTERN>     LSB pattern to use (linear or random) [default: random]
+      --lsb-bit-index <INDEX>     LSB target bit index (0-7) [default: 0]
+      --lsb-seed <SEED>           LSB seed for reproducible random patterns
+      --lsb-salt <SALT>           LSB salt for reproducible random patterns (minimum 8 characters)
+  -h, --help                      Print help
+  -V, --version                   Print version
 
 Available modes:
   lsb    Least Significant Bit embedding
+
+Available LSB patterns:
+  linear    Sequential bit embedding
+  random    Pseudo-random bit embedding (default)
 ```
 
 ## Library Usage
@@ -72,26 +114,44 @@ Available modes:
 PNGer can also be used as a Rust library:
 
 ```rust
-use pnger::{embed_payload_from_file_with_mode, Mode};
+use pnger::{EmbeddingOptions, EmbeddingStrategy, RandomOptions, LinearOptions, Obfuscation};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let result = embed_payload_from_file_with_mode(
-        "input.png",
-        b"secret data",
-        Mode::LSB,
-    )?;
+    // Basic embedding with random LSB
+    let strategy = EmbeddingStrategy::Random(RandomOptions::default());
+    let options = EmbeddingOptions::new(strategy);
     
-    std::fs::write("output.png", result)?;
+    // Reproducible random with seed and salt
+    let strategy = EmbeddingStrategy::Random(
+        RandomOptions::new()
+            .with_seed(b"myseed".to_vec())
+            .with_salt(b"verylongsalt".to_vec())
+    );
+    let mut options = EmbeddingOptions::new(strategy);
+    
+    // Add XOR obfuscation
+    options.obfuscation(Obfuscation::Xor { 
+        key: b"secretkey".to_vec() 
+    });
+    
+    // Linear pattern with custom bit index
+    let strategy = EmbeddingStrategy::Linear(
+        LinearOptions::new().with_bit_index(3)
+    );
+    let options = EmbeddingOptions::new(strategy);
+    
     Ok(())
 }
 ```
 
 ### API Functions
 
-- `embed_payload_from_file(png_path, payload_data)` - Embed using default mode
-- `embed_payload_from_file_with_mode(png_path, payload_data, mode)` - Embed with specific mode
+- `embed_payload_from_file(png_path, payload_data)` - Embed using default options
+- `embed_payload_from_file_with_options(png_path, payload_data, options)` - Embed with custom options
 - `embed_payload_from_bytes(png_data, payload_data)` - Memory-based embedding
-- `embed_payload_from_bytes_with_mode(png_data, payload_data, mode)` - Memory-based with mode
+- `embed_payload_from_bytes_with_options(png_data, payload_data, options)` - Memory-based with options
+- `extract_payload_from_file(png_path)` - Extract using default options
+- `extract_payload_from_file_with_options(png_path, options)` - Extract with matching options
 
 ## How It Works
 

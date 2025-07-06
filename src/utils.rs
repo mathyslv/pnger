@@ -1,21 +1,27 @@
-use std::io::BufWriter;
 use crate::error::PngerError;
+use std::io::BufWriter;
 
 /// Setup PNG encoder from decoder info
-pub fn setup_png_encoder<'a>(info: &png::Info, writer: &'a mut BufWriter<Vec<u8>>) -> Result<png::Encoder<'a, &'a mut BufWriter<Vec<u8>>>, PngerError> {
+pub fn setup_png_encoder<'a>(
+    info: &png::Info,
+    writer: &'a mut BufWriter<Vec<u8>>,
+) -> Result<png::Encoder<'a, &'a mut BufWriter<Vec<u8>>>, PngerError> {
     let mut encoder = png::Encoder::new(writer, info.width, info.height);
     encoder.set_color(info.color_type);
     encoder.set_depth(info.bit_depth);
     encoder.set_compression(info.compression);
     encoder.set_pixel_dims(info.pixel_dims);
-    
+
     copy_png_metadata(info, &mut encoder);
-    
+
     Ok(encoder)
 }
 
 /// Copy metadata from source PNG to destination encoder
-pub fn copy_png_metadata<'a>(info: &png::Info, encoder: &mut png::Encoder<'a, &'a mut BufWriter<Vec<u8>>>) {
+pub fn copy_png_metadata<'a>(
+    info: &png::Info,
+    encoder: &mut png::Encoder<'a, &'a mut BufWriter<Vec<u8>>>,
+) {
     if let Some(palette) = &info.palette {
         encoder.set_palette(palette.to_vec());
     }
