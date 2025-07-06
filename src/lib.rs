@@ -10,16 +10,17 @@ pub mod io;
 pub mod strategy;
 pub mod utils;
 
+/// Wire format payload size (32-bit for cross-platform compatibility)
+pub type PayloadSize = u32;
+
 // Re-exports for public API
 pub use error::PngerError;
-pub use strategy::Mode;
+pub use strategy::{LSBOptions, LSBPattern, Mode};
 
 use io::read_file;
 use utils::setup_png_encoder;
 
 use crate::strategy::lsb::LSBStrategy;
-
-pub const DEFAULT_LSG_TARGET_BIT_INDEX: u8 = 0;
 
 /// Extract a payload from PNG data (memory-based API)
 ///
@@ -37,9 +38,7 @@ pub fn extract_payload_from_bytes_with_mode(
     let (mut reader, info) = decode_png_info(png_data)?;
     let mut image_data = read_image_data(&mut reader)?;
     let payload = match mode {
-        Mode::LSB => {
-            LSBStrategy::new(&mut image_data, DEFAULT_LSG_TARGET_BIT_INDEX).extract_payload()?
-        }
+        Mode::LSB(options) => LSBStrategy::new(&mut image_data, options).extract_payload()?,
     };
     let original_png = encode_png_with_data(&info, &image_data)?;
     Ok((payload, original_png))
@@ -82,8 +81,9 @@ pub fn embed_payload_from_bytes_with_mode(
     let (mut reader, info) = decode_png_info(png_data)?;
     let mut image_data = read_image_data(&mut reader)?;
     match mode {
-        Mode::LSB => LSBStrategy::new(&mut image_data, DEFAULT_LSG_TARGET_BIT_INDEX)
-            .embed_payload(payload_data)?,
+        Mode::LSB(options) => {
+            LSBStrategy::new(&mut image_data, options).embed_payload(payload_data)?
+        }
     }
     encode_png_with_data(&info, &image_data)
 }
@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_mode_enum() {
-        let mode = Mode::LSB;
+        let mode = Mode::LSB(LSBOptions::default());
         assert_eq!(mode, Mode::default());
     }
 }

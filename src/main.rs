@@ -14,9 +14,9 @@ fn embed_payload(args: &Cli, payload_data: &[u8]) -> Result<Vec<u8>> {
             .to_str()
             .context("Input file path contains invalid UTF-8")?,
         payload_data,
-        args.mode.into(),
+        args.get_mode(),
     )
-    .context("Failed to embed payload into PNG")
+    .context("Failed to extract payload from PNG")
 }
 
 /// Extract payload from PNG using specified mode
@@ -25,9 +25,9 @@ fn extract_payload(args: &Cli) -> Result<Vec<u8>> {
         args.input
             .to_str()
             .context("Input file path contains invalid UTF-8")?,
-        args.mode.into(),
+        args.get_mode(),
     )
-    .context("Failed to embed payload into PNG")
+    .context("Failed to extract payload into PNG")
     .map(|(payload, _)| payload)
 }
 

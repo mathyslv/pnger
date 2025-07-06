@@ -1,20 +1,16 @@
+pub mod lsb;
+
 use anyhow::bail;
 use clap::{Parser, ValueEnum};
 use pnger::Mode;
 use std::path::PathBuf;
 
+use lsb::{LSBCliOptions, LSBPatternArg};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ModeArg {
     /// Least Significant Bit strategy
     Lsb,
-}
-
-impl From<ModeArg> for Mode {
-    fn from(arg: ModeArg) -> Self {
-        match arg {
-            ModeArg::Lsb => Mode::LSB,
-        }
-    }
 }
 
 #[derive(Parser)]
@@ -60,6 +56,18 @@ pub struct Cli {
     /// Extract payload from input file
     #[arg(short = 'x', long)]
     pub extract: bool,
+
+    /// LSB pattern to use (linear or random) [default: random]
+    #[arg(long, value_enum)]
+    pub lsb_pattern: Option<LSBPatternArg>,
+
+    /// LSB target bit index (0-7) [default: 0]
+    #[arg(long, value_parser = clap::value_parser!(u8).range(0..=7))]
+    pub lsb_bit_index: Option<u8>,
+
+    /// LSB random seed for reproducible random patterns [default: none]
+    #[arg(long)]
+    pub lsb_seed: Option<u64>,
 }
 
 impl Cli {
@@ -67,6 +75,20 @@ impl Cli {
     pub fn parse_and_validate() -> anyhow::Result<Self> {
         let cli = Self::parse();
         cli.validate().map(|_| cli)
+    }
+
+    /// Convert CLI arguments to Mode with options
+    pub fn get_mode(&self) -> Mode {
+        match self.mode {
+            ModeArg::Lsb => {
+                let lsb_options = LSBCliOptions {
+                    pattern: self.lsb_pattern,
+                    bit_index: self.lsb_bit_index,
+                    seed: self.lsb_seed,
+                };
+                Mode::LSB(lsb_options.to_options())
+            }
+        }
     }
 
     fn validate(&self) -> anyhow::Result<()> {
