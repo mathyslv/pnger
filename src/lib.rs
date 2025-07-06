@@ -10,6 +10,9 @@ pub mod io;
 pub mod strategy;
 pub mod utils;
 
+/// Wire format payload size (32-bit for cross-platform compatibility)
+pub type PayloadSize = u32;
+
 // Re-exports for public API
 pub use error::PngerError;
 pub use strategy::{LSBOptions, LSBPattern, Mode};

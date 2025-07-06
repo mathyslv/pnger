@@ -1,5 +1,8 @@
 pub mod lsb;
 
+/// Wire format payload size (32-bit for cross-platform compatibility)  
+pub type PayloadSize = u32;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LSBPattern {
     Linear,

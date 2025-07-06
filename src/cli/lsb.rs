@@ -18,7 +18,6 @@ impl From<LSBPatternArg> for LSBPattern {
     }
 }
 
-/// LSB-specific CLI options - uses Option types to detect user input vs defaults
 #[derive(Debug, Clone)]
 pub struct LSBCliOptions {
     pub pattern: Option<LSBPatternArg>,
@@ -27,10 +26,9 @@ pub struct LSBCliOptions {
 }
 
 impl LSBCliOptions {
-    /// Convert CLI options to library options, using library defaults when user didn't specify values
     pub fn to_options(&self) -> LSBOptions {
         let defaults = LSBOptions::default();
-        
+
         LSBOptions {
             pattern: self.pattern.map(|p| p.into()).unwrap_or(defaults.pattern),
             target_bit_index: self.bit_index.unwrap_or(defaults.target_bit_index),

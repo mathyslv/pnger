@@ -5,7 +5,7 @@ use clap::{Parser, ValueEnum};
 use pnger::Mode;
 use std::path::PathBuf;
 
-use self::lsb::{LSBCliOptions, LSBPatternArg};
+use lsb::{LSBCliOptions, LSBPatternArg};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ModeArg {
