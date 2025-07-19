@@ -2,7 +2,7 @@ pub mod lsb;
 
 use anyhow::bail;
 use clap::{Parser, ValueEnum};
-use pnger::{strategy::Strategy, EmbeddingOptions, Obfuscation};
+use pnger::{EmbeddingOptions, Obfuscation, strategy::Strategy};
 use std::path::PathBuf;
 
 use lsb::LSBPatternArg;
@@ -171,7 +171,9 @@ impl Cli {
     fn validate(&self) -> anyhow::Result<()> {
         // either --output or --raw must be specified
         if self.output.is_none() && !self.raw {
-            bail!("Error: must specify either --output <FILE> or --raw for output method.\nUse --help for more information.");
+            bail!(
+                "Error: must specify either --output <FILE> or --raw for output method.\nUse --help for more information."
+            );
         }
 
         if !self.extract && self.payload.is_none() {

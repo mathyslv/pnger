@@ -107,8 +107,8 @@ type PayloadSize = u32;
 
 // Re-exports for public API
 pub use crate::obfuscation::Obfuscation;
-use crate::strategy::lsb::LSBEmbedder;
 pub use crate::strategy::Strategy;
+use crate::strategy::lsb::LSBEmbedder;
 pub use error::PngerError;
 
 use io::read_file;

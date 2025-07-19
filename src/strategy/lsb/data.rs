@@ -1,9 +1,9 @@
-use crate::error::PngerError;
-use crate::strategy::lsb::utils::{embed_bit, extract_bit};
-use crate::strategy::lsb::RuntimePattern;
 use crate::PayloadSize;
-use rand::seq::SliceRandom;
+use crate::error::PngerError;
+use crate::strategy::lsb::RuntimePattern;
+use crate::strategy::lsb::utils::{embed_bit, extract_bit};
 use rand::SeedableRng;
+use rand::seq::SliceRandom;
 
 pub(super) struct BodyEmbedder<'a> {
     target_bit_index: u8,
@@ -54,8 +54,11 @@ impl<'a> BodyEmbedder<'a> {
 
         for bit_pos in 0..8 {
             if self.index >= self.indices.len() {
-                panic!("LSB index {} is out of bounds (max: {}). Payload too large for available capacity.", 
-                       self.index, self.indices.len());
+                panic!(
+                    "LSB index {} is out of bounds (max: {}). Payload too large for available capacity.",
+                    self.index,
+                    self.indices.len()
+                );
             }
 
             let image_index = self.indices[self.index] as usize;
