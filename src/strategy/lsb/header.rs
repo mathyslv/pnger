@@ -33,7 +33,7 @@ impl From<HeaderError> for PngerError {
     fn from(err: HeaderError) -> Self {
         match err {
             HeaderError::InsufficientSpace(needed, have) => PngerError::PayloadError {
-                message: format!("Header needs {} bytes, have {}", needed, have),
+                message: format!("Header needs {needed} bytes, have {have}"),
             },
             HeaderError::InsufficientData => {
                 PngerError::InvalidFormat("Insufficient header data".to_string())
@@ -42,11 +42,10 @@ impl From<HeaderError> for PngerError {
                 PngerError::InvalidFormat("Invalid header magic".to_string())
             }
             HeaderError::CrcMismatch { expected, found } => PngerError::InvalidFormat(format!(
-                "Header CRC mismatch: expected {:08x}, found {:08x}",
-                expected, found
+                "Header CRC mismatch: expected {expected:08x}, found {found:08x}"
             )),
             HeaderError::UnsupportedVersion(v) => {
-                PngerError::InvalidFormat(format!("Unsupported header version: {}", v))
+                PngerError::InvalidFormat(format!("Unsupported header version: {v}"))
             }
             HeaderError::Io(io_err) => PngerError::FileIo(io_err),
         }

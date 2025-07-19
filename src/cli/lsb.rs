@@ -25,7 +25,7 @@ impl LSBPatternArg {
         // Apply bit index if provided
         if let Some(index) = bit_index {
             if index > 7 {
-                return Err(format!("Bit index must be 0-7, got {}", index));
+                return Err(format!("Bit index must be 0-7, got {index}"));
             }
             config = config.with_bit_index(index);
         }

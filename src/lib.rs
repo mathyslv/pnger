@@ -957,6 +957,6 @@ fn encode_png_with_data(info: &png::Info, image_data: &[u8]) -> Result<Vec<u8>, 
     writer.finish()?;
 
     writer_buffer.into_inner().map_err(|e| PngerError::IoError {
-        message: format!("Failed to extract buffer: {}", e),
+        message: format!("Failed to extract buffer: {e}"),
     })
 }

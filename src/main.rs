@@ -69,7 +69,7 @@ fn main() -> Result<()> {
         ));
         let payload_file = &args.payload.clone().expect("payload has to be specified");
         let payload_data = fs::read(payload_file)
-            .with_context(|| format!("Failed to read payload file '{:?}'", payload_file))?;
+            .with_context(|| format!("Failed to read payload file '{payload_file:?}'"))?;
         embed_payload(&args, &payload_data)?
     };
     write_result(&args, &result)?;

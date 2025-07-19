@@ -106,8 +106,7 @@ mod tests {
                 let extracted = extract_bit(bit_pos, embedded);
                 assert_eq!(
                     extracted, bit_val,
-                    "Round-trip failed at position {} with bit {}",
-                    bit_pos, bit_val
+                    "Round-trip failed at position {bit_pos} with bit {bit_val}"
                 );
             }
         }
