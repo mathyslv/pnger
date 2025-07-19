@@ -1,8 +1,13 @@
 # PNGer
 
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/user/pnger)
+![Crates.io MSRV](https://img.shields.io/crates/msrv/pnger)
+[![Crates.io](https://img.shields.io/crates/v/pnger?style=flat-square)](https://crates.io/crates/pnger)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE-APACHE)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE-MIT)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/mathyslv/pnger/ci.yml?branch=main&style=flat-square)](https://github.com/mathyslv/pnger/actions/workflows/ci.yml?query=branch%3Amain)
+[![Coverage Status](https://img.shields.io/coveralls/github/mathyslv/pnger/main?style=flat-square)](https://coveralls.io/github/mathyslv/pnger?branch=main)
+[![Contributors](https://img.shields.io/github/contributors/mathyslv/pnger?style=flat-square)](https://github.com/mathyslv/pnger/graphs/contributors)
+
 
 A cross-platform command-line tool for embedding payloads within PNG files using steganography techniques.
 

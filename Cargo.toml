@@ -6,8 +6,15 @@ license = "MIT OR Apache-2.0"
 keywords = ["rust", "png", "steganography", "evasion"]
 authors = ["mathyslv <mathys.lv@hotmail.com>"]
 description = "Cross-platform PNG steganography tool for embedding and extracting payloads"
-documentation = "https://docs.rs/pnger"
+homepage = "https://github.com/mathyslv/pnger"
 repository = "https://github.com/mathyslv/pnger"
+
+exclude = [
+    "/.github/",
+    "/docs/",
+    "/examples/*.png",
+    "*.log"
+]
 
 [package.metadata]
 msrv = "1.85.1"
