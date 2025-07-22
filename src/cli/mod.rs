@@ -26,8 +26,8 @@ pub enum StrategyArg {
     # Embed payload.json into image.png and save to output.png
     pnger -i image.png -p payload.json -o output.png
 
-    # Use explicit LSB mode
-    pnger -i image.png -p payload.bin -o output.png --mode lsb
+    # Use explicit LSB strategy
+    pnger -i image.png -p payload.bin -o output.png --strategy lsb
 
     # Output raw binary data to stdout
     pnger -i image.png -p payload.txt --raw > output.png

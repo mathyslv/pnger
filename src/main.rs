@@ -9,7 +9,6 @@ use crate::cli::Cli;
 
 macro_rules! log {
     ($level:ident($($arg:tt)+)) => {
-        #[cfg(feature = "bin_log")]
         log::$level!($($arg)*);
     };
 }

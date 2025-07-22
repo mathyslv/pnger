@@ -40,46 +40,71 @@ cargo install pnger
 
 ### Basic Examples
 
-Embed a text file into a PNG image:
+Embed payload.json into image.png and save to output.png:
 ```bash
-pnger -i photo.png -p secret.txt -o output.png
+pnger -i image.png -p payload.json -o output.png
 ```
 
-Embed binary data with explicit LSB mode:
+Use explicit LSB strategy:
 ```bash
-pnger -i image.png -p payload.bin -o steganographic.png --mode lsb
+pnger -i image.png -p payload.bin -o output.png --strategy lsb
 ```
 
-Output to stdout for piping:
+Output raw binary data to stdout:
 ```bash
-pnger -i image.png -p data.json --raw > result.png
+pnger -i image.png -p payload.txt --raw > output.png
 ```
 
 ### Advanced Examples
 
-Advanced LSB with reproducible random pattern:
+LSB with password-based pattern (secure, nothing embedded):
 ```bash
-pnger -i photo.png -p secret.txt -o output.png --lsb-seed "myseed" --lsb-salt "verylongsalt"
+pnger -i image.png -p secret.txt -o output.png --lsb-password "mypassword123"
 ```
 
-Linear LSB pattern for sequential embedding:
+LSB with manual hex seed (32 bytes = 64 hex chars):
 ```bash
-pnger -i image.png -p data.bin -o result.png --lsb-pattern linear
+pnger -i image.png -p data.bin -o output.png --lsb-seed "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 ```
 
-Target specific bit position (bit 2 instead of LSB):
+LSB linear pattern instead of random:
 ```bash
-pnger -i photo.png -p payload.json -o steganographic.png --lsb-bit-index 2
+pnger -i image.png -p data.txt -o output.png --lsb-pattern linear
 ```
 
-Add XOR obfuscation for extra security:
+LSB with custom bit index (target bit 3 instead of 0):
 ```bash
-pnger -i image.png -p sensitive.txt -o encrypted.png --xor --xor-key "secretkey"
+pnger -i image.png -p secret.bin -o output.png --lsb-bit-index 3
 ```
 
-Extract with matching parameters:
+XOR obfuscation with default key:
 ```bash
-pnger -x -i encrypted.png -o extracted.txt --lsb-seed "myseed" --lsb-salt "verylongsalt" --xor --xor-key "secretkey"
+pnger -i image.png -p sensitive.txt -o output.png --xor
+```
+
+XOR obfuscation with custom key:
+```bash
+pnger -i image.png -p data.json -o output.png --xor --xor-key "mykey123"
+```
+
+Combined: LSB password + XOR:
+```bash
+pnger -i image.png -p payload.bin -o output.png --lsb-password "mypassword" --xor --xor-key "encrypt"
+```
+
+Extract payload from image.png and save to payload.json:
+```bash
+pnger -x -i output.png -o payload.json
+```
+
+Extract with matching LSB and XOR parameters:
+```bash
+pnger -x -i output.png -o extracted.txt --lsb-password "mypassword" --xor --xor-key "encrypt"
+```
+
+Extract payload to stdout:
+```bash
+pnger -x -i output.png --raw
 ```
 
 ### Command Line Options
@@ -88,22 +113,22 @@ pnger -x -i encrypted.png -o extracted.txt --lsb-seed "myseed" --lsb-salt "veryl
 Usage: pnger [OPTIONS] --input <FILE>
 
 Options:
-  -i, --input <FILE>              Input PNG file
-  -p, --payload <FILE>            Payload file to embed
-  -o, --output <FILE>             Output file (write result to file)
-      --raw                       Output raw binary data to stdout
-  -m, --mode <MODE>               Embedding mode to use [default: lsb]
-  -x, --extract                   Extract payload from input file
-      --xor                       Toggle payload obfuscation with XOR algorithm
-      --xor-key <XOR_KEY>         Key to use for XOR obfuscation
-      --lsb-pattern <PATTERN>     LSB pattern to use (linear or random) [default: random]
-      --lsb-bit-index <INDEX>     LSB target bit index (0-7) [default: 0]
-      --lsb-seed <SEED>           LSB seed for reproducible random patterns
-      --lsb-salt <SALT>           LSB salt for reproducible random patterns (minimum 8 characters)
-  -h, --help                      Print help
-  -V, --version                   Print version
+  -i, --input <FILE>                   Input PNG file
+  -p, --payload <FILE>                 Payload file to embed
+  -o, --output <FILE>                  Output file (write result to file)
+      --raw                            Output raw result data to stdout
+  -s, --strategy <STRATEGY>            Embedding strategy to use [default: lsb]
+  -x, --extract                        Extract payload from input file
+      --xor                            Toggle payload obfuscation with XOR algorithm
+      --xor-key <XOR_KEY>              Key to use for XOR obfuscation
+      --lsb-pattern <LSB_PATTERN>      LSB pattern to use (linear or random) [default: random]
+      --lsb-bit-index <LSB_BIT_INDEX>  LSB target bit index (0-7) [default: 0]
+      --lsb-password <LSB_PASSWORD>    Password for reproducible random patterns (nothing embedded in PNG)
+      --lsb-seed <LSB_SEED>            LSB seed for reproducible random patterns (raw 32-byte hex seed)
+  -h, --help                           Print help
+  -V, --version                        Print version
 
-Available modes:
+Available strategies:
   lsb    Least Significant Bit embedding
 
 Available LSB patterns:
@@ -116,18 +141,17 @@ Available LSB patterns:
 PNGer can also be used as a Rust library:
 
 ```rust
-use pnger::{EmbeddingOptions, EmbeddingStrategy, RandomOptions, LinearOptions, Obfuscation};
+use pnger::{EmbeddingOptions, Strategy, Obfuscation};
+use pnger::strategy::lsb::{LSBConfig, BitIndex};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Basic embedding with random LSB
-    let strategy = EmbeddingStrategy::Random(RandomOptions::default());
+    // Basic embedding with random LSB (default)
+    let strategy = Strategy::LSB(LSBConfig::random());
     let options = EmbeddingOptions::new(strategy);
     
-    // Reproducible random with seed and salt
-    let strategy = EmbeddingStrategy::Random(
-        RandomOptions::new()
-            .with_seed(b"myseed".to_vec())
-            .with_salt(b"verylongsalt".to_vec())
+    // Password-protected random pattern
+    let strategy = Strategy::LSB(
+        LSBConfig::random().with_password("my_secret_password".to_string())
     );
     let mut options = EmbeddingOptions::new(strategy);
     
@@ -137,10 +161,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
     
     // Linear pattern with custom bit index
-    let strategy = EmbeddingStrategy::Linear(
-        LinearOptions::new().with_bit_index(3)
+    let strategy = Strategy::LSB(
+        LSBConfig::linear().with_bit_index(BitIndex::Bit3)
     );
     let options = EmbeddingOptions::new(strategy);
+    
+    // Using fluent builder API (recommended)
+    let options = EmbeddingOptions::linear()
+        .with_xor_string("encryption_key");
+    
+    let options = EmbeddingOptions::random_with_password("secure_password")
+        .with_bit_index(BitIndex::Bit1)
+        .with_xor_key(b"additional_layer".to_vec());
     
     Ok(())
 }
