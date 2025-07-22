@@ -43,13 +43,13 @@ pub type PayloadSize = u32;
 ///
 /// ## Custom LSB Configuration
 /// ```rust
-/// use pnger::strategy::{Strategy, lsb::LSBConfig};
+/// use pnger::strategy::{Strategy, lsb::{LSBConfig, BitIndex}};
 ///
 /// // Random pattern with password-derived seed
 /// let strategy = Strategy::LSB(
 ///     LSBConfig::random()
 ///         .with_password("secret_key".to_string())
-///         .with_bit_index(1)
+///         .with_bit_index(BitIndex::Bit1)
 /// );
 /// ```
 ///
@@ -59,12 +59,12 @@ pub type PayloadSize = u32;
 /// - **Random patterns** provide better security at the cost of some performance
 /// - **Password-derived seeds** don't require embedding seed data in the image
 /// - **Auto-generated seeds** provide maximum entropy but must be stored in the image
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Strategy {
     /// LSB (Least Significant Bit) steganography with configurable options.
     ///
     /// This strategy embeds data by modifying the least significant bits of
-    /// image pixels. The LSBConfig determines the specific embedding pattern,
+    /// image pixels. The `LSBConfig` determines the specific embedding pattern,
     /// bit positions, and security options.
     LSB(LSBConfig),
 }

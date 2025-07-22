@@ -4,14 +4,20 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 keywords = ["rust", "png", "steganography", "evasion"]
+categories = [
+    "development-tools",
+    "cryptography",
+    "multimedia::images",
+    "encoding", 
+    "command-line-utilities"
+]
 authors = ["mathyslv <mathys.lv@hotmail.com>"]
 description = "Cross-platform PNG steganography tool for embedding and extracting payloads"
 homepage = "https://github.com/mathyslv/pnger"
 repository = "https://github.com/mathyslv/pnger"
 exclude = [
     "/.github/",
-    "/docs/",
-    "/examples/*.png",
+    "/examples/assets/*.png",
     "*.log"
 ]
 rust-version = "1.85.1"
@@ -23,29 +29,50 @@ msrv = "1.85.1"
 name = "pnger"
 required-features = ["bin"]
 
-[dependencies]
-clap = { version = "4.0", features = ["derive"] }
-thiserror = "2"
-anyhow = "1.0"
-png = "0.17.16"
-argon2 = "0.5.3"
-hex = "0.4"
-getrandom = "0.3.3"
-rand_chacha = "0.9.0"
-rand = "0.9.1"
-bitflags = "2.9.1"
-binrw = "0.15"
-crc32fast = "1.4"
-log = { version = "0.4.27", features = ["kv"], optional = true }
-env_logger = { version = "0.11.8", features = ["kv"], optional = true }
-
-[features]
-default = ["log"]
-log = ["dep:log"]
-bin = ["log", "dep:env_logger"]
-
 [profile.release]
 strip = true
 opt-level = "z"
 lto = true
 codegen-units = 1
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[profile.test.package.proptest]
+opt-level = 3
+
+[profile.test.package.rand_chacha]
+opt-level = 3
+
+[dependencies]
+argon2 = "0.5.3"
+binrw = "0.15"
+bitflags = "2.9.1"
+crc32fast = "1.4"
+getrandom = "0.3.3"
+log = { version = "0.4.27", features = ["kv"], optional = true }
+png = "0.17.16"
+rand = "0.9.1"
+rand_chacha = "0.9.0"
+thiserror = "2"
+
+# bin dependencies
+anyhow = { version = "1.0", optional = true }
+clap = { version = "4.0", features = ["derive"], optional = true }
+env_logger = { version = "0.11.8", features = ["kv"], optional = true }
+hex = { version = "0.4", optional = true }
+
+[features]
+default = ["log"]
+log = ["dep:log"]
+bin = [
+    "log",
+    "dep:anyhow",
+    "dep:clap",
+    "dep:env_logger",
+    "dep:hex",
+]
+
+[dev-dependencies]
+proptest = "1.0"

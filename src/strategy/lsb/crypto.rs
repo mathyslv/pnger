@@ -1,3 +1,4 @@
+use super::SEED_SIZE;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -6,7 +7,7 @@ pub enum CryptoError {
     GetRandom(#[from] getrandom::Error),
     #[error("Key derivation error: {0}")]
     KeyDerivation(String),
-    #[error("Invalid seed length: expected 32 bytes, got {0}")]
+    #[error("Invalid seed length: expected {expected} bytes, got {0}", expected = SEED_SIZE)]
     InvalidSeedLength(usize),
 }
 
@@ -17,8 +18,8 @@ pub enum CryptoMode {
     Auto,
     /// Derive seed from password using Argon2 (nothing embedded)
     Password(String),
-    /// User provides raw 32-byte seed directly
-    Manual([u8; 32]),
+    /// User provides raw seed directly
+    Manual([u8; SEED_SIZE]),
 }
 
 impl Default for CryptoMode {
@@ -45,7 +46,7 @@ impl CryptoParams {
         }
     }
 
-    pub fn manual(seed: [u8; 32]) -> Self {
+    pub fn manual(seed: [u8; SEED_SIZE]) -> Self {
         Self {
             mode: CryptoMode::Manual(seed),
         }
@@ -58,12 +59,12 @@ impl CryptoParams {
 
 #[derive(Debug)]
 pub struct CryptoContext {
-    pub seed: [u8; 32],
+    pub seed: [u8; SEED_SIZE],
     pub is_embeddable: bool,
 }
 
 impl CryptoContext {
-    pub fn new(seed: [u8; 32], is_embeddable: bool) -> Self {
+    pub const fn new(seed: [u8; SEED_SIZE], is_embeddable: bool) -> Self {
         Self {
             seed,
             is_embeddable,
@@ -76,17 +77,17 @@ impl CryptoContext {
         Ok(bytes)
     }
 
-    pub fn generate_random_seed() -> Result<[u8; 32], CryptoError> {
-        Self::generate_random_bytes::<32>()
+    pub fn generate_random_seed() -> Result<[u8; SEED_SIZE], CryptoError> {
+        Self::generate_random_bytes::<SEED_SIZE>()
     }
 
     /// Derive seed from password using Argon2 with built-in salt
-    pub fn derive_seed_from_password(password: &str) -> Result<[u8; 32], CryptoError> {
+    pub fn derive_seed_from_password(password: &str) -> Result<[u8; SEED_SIZE], CryptoError> {
         use argon2::Argon2;
 
         // Built-in salt ensures reproducibility without storing salt
         let salt = b"pnger_steganography_salt_v1_____"; // 32 bytes
-        let mut seed = [0u8; 32];
+        let mut seed = [0u8; SEED_SIZE];
 
         let argon2 = Argon2::default();
         argon2

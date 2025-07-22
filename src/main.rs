@@ -54,7 +54,6 @@ fn write_result(args: &Cli, result: &[u8]) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    #[cfg(feature = "bin_log")]
     env_logger::init();
 
     let args = Cli::parse_and_validate()?;

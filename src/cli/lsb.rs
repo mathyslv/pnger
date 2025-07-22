@@ -1,5 +1,5 @@
 use clap::ValueEnum;
-use pnger::strategy::lsb::LSBConfig;
+use pnger::strategy::lsb::{BitIndex, LSBConfig, SEED_SIZE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum LSBPatternArg {
@@ -24,10 +24,9 @@ impl LSBPatternArg {
 
         // Apply bit index if provided
         if let Some(index) = bit_index {
-            if index > 7 {
-                return Err(format!("Bit index must be 0-7, got {index}"));
-            }
-            config = config.with_bit_index(index);
+            let bit_index = BitIndex::try_from(index)
+                .map_err(|_| format!("Bit index must be 0-7, got {index}"))?;
+            config = config.with_bit_index(bit_index);
         }
 
         // Apply password or seed for random patterns
@@ -35,12 +34,20 @@ impl LSBPatternArg {
             if let Some(password) = password {
                 config = config.with_password(password);
             } else if let Some(seed) = seed {
-                if seed.len() != 32 {
-                    return Err(format!("Seed must be exactly 32 bytes, got {}", seed.len()));
+                if seed.len() != SEED_SIZE {
+                    return Err(format!(
+                        "Seed must be exactly {} bytes, got {}",
+                        SEED_SIZE,
+                        seed.len()
+                    ));
                 }
-                let seed_array: [u8; 32] = seed
-                    .try_into()
-                    .map_err(|_| "Failed to convert seed to array")?;
+                let seed_array: [u8; SEED_SIZE] = seed.try_into().map_err(|v: Vec<u8>| {
+                    format!(
+                        "Failed to convert seed to array: expected {} bytes, got {} bytes",
+                        SEED_SIZE,
+                        v.len()
+                    )
+                })?;
                 config = config.with_seed(seed_array);
             }
             // If neither password nor seed provided, use auto (default)

@@ -49,14 +49,14 @@
 //!
 //! ```no_run
 //! use pnger::{embed_payload_from_file_with_options, EmbeddingOptions, Strategy};
-//! use pnger::strategy::lsb::LSBConfig;
+//! use pnger::strategy::lsb::{LSBConfig, BitIndex};
 //! use pnger::Obfuscation;
 //!
 //! // Configure random pattern with password protection and XOR obfuscation
 //! let strategy = Strategy::LSB(
 //!     LSBConfig::random()
 //!         .with_password("my_secret_password".to_string())
-//!         .with_bit_index(1)
+//!         .with_bit_index(BitIndex::Bit1)
 //! );
 //! let options = EmbeddingOptions::new_with_obfuscation(
 //!     strategy,
@@ -64,6 +64,34 @@
 //! );
 //!
 //! let payload = b"highly secure secret message";
+//! let result = embed_payload_from_file_with_options("image.png", payload, options)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ### Fluent Builder API
+//!
+//! The fluent builder API provides an ergonomic way to configure embedding options:
+//!
+//! ```no_run
+//! use pnger::{embed_payload_from_file_with_options, EmbeddingOptions};
+//! use pnger::strategy::lsb::BitIndex;
+//!
+//! // Simple linear embedding with XOR encryption
+//! let options = EmbeddingOptions::linear()
+//!     .with_xor_string("my_encryption_key");
+//!
+//! // Random embedding with password and custom bit index
+//! let options = EmbeddingOptions::random_with_password("secure_password")
+//!     .with_bit_index(BitIndex::Bit2)
+//!     .with_xor_key(b"additional_layer".to_vec());
+//!
+//! // Conditional configuration
+//! let password = Some("secret".to_string());
+//! let options = EmbeddingOptions::random()
+//!     .with_password_if_some(password)
+//!     .with_xor_string("encryption_key");
+//!
+//! let payload = b"fluent API example";
 //! let result = embed_payload_from_file_with_options("image.png", payload, options)?;
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -93,16 +121,17 @@
 //! - **Crypto Errors**: Random number generation or password derivation failures
 //! - **Format Errors**: Invalid PNG structure or corrupted data
 
-use std::io::{BufWriter, Cursor};
+use std::{
+    io::{BufWriter, Cursor},
+    path::Path,
+};
 
-// Module declarations
 pub mod error;
 mod io;
 pub mod obfuscation;
 pub mod strategy;
 mod utils;
 
-/// Wire format payload size (32-bit for cross-platform compatibility)
 type PayloadSize = u32;
 
 // Re-exports for public API
@@ -117,12 +146,12 @@ use utils::setup_png_encoder;
 /// Configuration options for payload embedding and extraction operations.
 ///
 /// This struct combines embedding strategy selection with optional payload obfuscation
-/// settings. It provides a high-level interface for configuring steganography operations
-/// without needing to manage low-level implementation details.
+/// settings. It provides both traditional constructors and a fluent builder API for
+/// configuring steganography operations without needing to manage low-level implementation details.
 ///
 /// # Examples
 ///
-/// ## Basic Strategy Configuration
+/// ## Traditional Constructor API
 ///
 /// ```rust
 /// use pnger::{EmbeddingOptions, Strategy};
@@ -151,7 +180,31 @@ use utils::setup_png_encoder;
 /// let obfuscation = Obfuscation::Xor { key: b"encryption_key".to_vec() };
 /// let options = EmbeddingOptions::new_with_obfuscation(strategy, obfuscation);
 /// ```
-#[derive(Debug, Default)]
+///
+/// ## Fluent Builder API
+///
+/// The fluent builder API provides an ergonomic way to configure options:
+///
+/// ```rust
+/// use pnger::{EmbeddingOptions};
+/// use pnger::strategy::lsb::BitIndex;
+///
+/// // Linear with XOR encryption
+/// let options = EmbeddingOptions::linear()
+///     .with_xor_string("my_key");
+///
+/// // Random with password and custom settings
+/// let options = EmbeddingOptions::random_with_password("secure_password")
+///     .with_bit_index(BitIndex::Bit1)
+///     .with_xor_key(vec![0x42, 0xAA, 0xFF]);
+///
+/// // Conditional configuration
+/// let password = Some("optional_password".to_string());
+/// let options = EmbeddingOptions::random()
+///     .with_password_if_some(password)
+///     .without_obfuscation(); // Remove any previous obfuscation
+/// ```
+#[derive(Debug, Clone, Default)]
 pub struct EmbeddingOptions {
     strategy: Strategy,
     obfuscation: Option<Obfuscation>,
@@ -160,9 +213,10 @@ pub struct EmbeddingOptions {
 impl EmbeddingOptions {
     /// Creates new embedding options with the specified strategy.
     ///
-    /// # Arguments
-    ///
-    /// * `strategy` - The embedding strategy to use (currently supports LSB)
+    /// This is the traditional constructor that takes a complete Strategy configuration.
+    /// For a more ergonomic API, consider using the fluent builder methods like
+    /// [`linear()`](Self::linear), [`random()`](Self::random), or
+    /// [`random_with_password()`](Self::random_with_password).
     ///
     /// # Examples
     ///
@@ -172,7 +226,7 @@ impl EmbeddingOptions {
     ///
     /// let options = EmbeddingOptions::new(Strategy::LSB(LSBConfig::linear()));
     /// ```
-    pub fn new(strategy: Strategy) -> Self {
+    pub const fn new(strategy: Strategy) -> Self {
         Self {
             strategy,
             obfuscation: None,
@@ -184,10 +238,8 @@ impl EmbeddingOptions {
     /// Combines an embedding strategy with payload obfuscation for enhanced security.
     /// The payload will be obfuscated before embedding and deobfuscated after extraction.
     ///
-    /// # Arguments
-    ///
-    /// * `strategy` - The embedding strategy to use
-    /// * `obfuscation` - The obfuscation method to apply to the payload
+    /// For a more ergonomic API, consider using the fluent builder methods like
+    /// [`linear()`](Self::linear)`.with_xor_key()` or [`random()`](Self::random)`.with_xor_string()`.
     ///
     /// # Examples
     ///
@@ -199,21 +251,14 @@ impl EmbeddingOptions {
     /// let obfuscation = Obfuscation::Xor { key: b"secret".to_vec() };
     /// let options = EmbeddingOptions::new_with_obfuscation(strategy, obfuscation);
     /// ```
-    pub fn new_with_obfuscation(strategy: Strategy, obfuscation: Obfuscation) -> Self {
+    pub const fn new_with_obfuscation(strategy: Strategy, obfuscation: Obfuscation) -> Self {
         Self {
             strategy,
             obfuscation: Some(obfuscation),
         }
     }
 
-    /// Sets the obfuscation method for these options.
-    ///
-    /// This method allows you to add or change the obfuscation settings after
-    /// creating the embedding options.
-    ///
-    /// # Arguments
-    ///
-    /// * `obfuscation` - The obfuscation method to use
+    /// Sets the obfuscation method.
     ///
     /// # Examples
     ///
@@ -222,10 +267,235 @@ impl EmbeddingOptions {
     /// use pnger::strategy::lsb::LSBConfig;
     ///
     /// let mut options = EmbeddingOptions::new(Strategy::LSB(LSBConfig::linear()));
-    /// options.obfuscation(Obfuscation::Xor { key: b"key".to_vec() });
+    /// options.set_obfuscation(Some(Obfuscation::Xor { key: b"key".to_vec() }));
     /// ```
-    pub fn obfuscation(&mut self, obfuscation: Obfuscation) {
-        self.obfuscation = Some(obfuscation)
+    pub fn set_obfuscation(&mut self, obfuscation: Option<Obfuscation>) {
+        self.obfuscation = obfuscation;
+    }
+
+    // ===== Fluent Builder API =====
+
+    /// Create embedding options with LSB linear strategy.
+    ///
+    /// This is a convenience constructor that creates an `EmbeddingOptions` instance
+    /// configured with a linear LSB pattern. Linear embedding is fast but creates
+    /// detectable patterns in the image.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// // Basic linear configuration
+    /// let options = EmbeddingOptions::linear();
+    ///
+    /// // Can be chained with fluent methods
+    /// let options = EmbeddingOptions::linear()
+    ///     .with_xor_string("encryption_key");
+    /// ```
+    pub fn linear() -> Self {
+        use crate::strategy::lsb::LSBConfig;
+        Self::new(Strategy::LSB(LSBConfig::linear()))
+    }
+
+    /// Create embedding options with LSB random strategy.
+    ///
+    /// This is a convenience constructor that creates an `EmbeddingOptions` instance
+    /// configured with a random LSB pattern using an auto-generated seed. Random
+    /// embedding is more secure but slightly slower than linear.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// // Basic random configuration (auto-generated seed)
+    /// let options = EmbeddingOptions::random();
+    ///
+    /// // Can be chained with fluent methods
+    /// let options = EmbeddingOptions::random()
+    ///     .with_xor_key(b"secret".to_vec());
+    /// ```
+    pub fn random() -> Self {
+        use crate::strategy::lsb::LSBConfig;
+        Self::new(Strategy::LSB(LSBConfig::random()))
+    }
+
+    /// Create embedding options with LSB random strategy and password-derived seed.
+    ///
+    /// This is a convenience constructor that creates an `EmbeddingOptions` instance
+    /// configured with a random LSB pattern using a password-derived seed. This provides
+    /// maximum security as no seed data is stored in the image.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// // Password-protected random embedding
+    /// let options = EmbeddingOptions::random_with_password("my_secret_password");
+    ///
+    /// // Can be chained with fluent methods  
+    /// let options = EmbeddingOptions::random_with_password("password123")
+    ///     .with_xor_string("additional_encryption");
+    /// ```
+    pub fn random_with_password<S: Into<String>>(password: S) -> Self {
+        use crate::strategy::lsb::LSBConfig;
+        Self::new(Strategy::LSB(
+            LSBConfig::random().with_password(password.into()),
+        ))
+    }
+
+    /// Add XOR obfuscation with a byte vector key.
+    ///
+    /// This method enables XOR-based payload obfuscation using the provided key.
+    /// The key can be of any length and will cycle to match the payload length.
+    /// XOR obfuscation adds an additional security layer without increasing payload size.
+    ///
+    /// # Parameters
+    /// - `key`: The encryption key as bytes (will cycle if shorter than payload)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::{EmbeddingOptions, strategy::lsb::BitIndex};
+    ///
+    /// let options = EmbeddingOptions::linear()
+    ///     .with_xor_key(b"encryption_key_123".to_vec());
+    ///
+    /// // Can be chained with other methods
+    /// let options = EmbeddingOptions::random()
+    ///     .with_xor_key(vec![0x42, 0xAA, 0xFF, 0x00])
+    ///     .with_bit_index(BitIndex::Bit1);
+    /// ```
+    pub fn with_xor_key<K: Into<Vec<u8>>>(mut self, key: K) -> Self {
+        self.obfuscation = Some(Obfuscation::Xor { key: key.into() });
+        self
+    }
+
+    /// Add XOR obfuscation with a string key.
+    ///
+    /// This is a convenience method that converts a string reference into bytes
+    /// for use as an XOR encryption key. The string is converted to UTF-8 bytes.
+    ///
+    /// # Parameters  
+    /// - `key`: The encryption key as a string reference
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// let options = EmbeddingOptions::linear()
+    ///     .with_xor_string("my_encryption_password");
+    ///
+    /// // Works with owned strings too
+    /// let key = String::from("dynamic_key");
+    /// let options = EmbeddingOptions::random()
+    ///     .with_xor_string(&key);
+    /// ```
+    pub fn with_xor_string<S: AsRef<str>>(mut self, key: S) -> Self {
+        self.obfuscation = Some(Obfuscation::Xor {
+            key: key.as_ref().bytes().collect(),
+        });
+        self
+    }
+
+    /// Remove any obfuscation, ensuring payload is embedded without encryption.
+    ///
+    /// This method explicitly removes any previously configured obfuscation,
+    /// ensuring the payload is embedded as-is without any encryption or transformation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// // Start with obfuscation, then remove it
+    /// let options = EmbeddingOptions::linear()
+    ///     .with_xor_string("temp_key")
+    ///     .without_obfuscation();
+    ///
+    /// // Useful for conditional obfuscation
+    /// let use_encryption = false;
+    /// let options = if use_encryption {
+    ///     EmbeddingOptions::random().with_xor_string("key")
+    /// } else {
+    ///     EmbeddingOptions::random().without_obfuscation()
+    /// };
+    /// ```
+    pub fn without_obfuscation(mut self) -> Self {
+        self.obfuscation = None;
+        self
+    }
+
+    /// Set the bit index for the underlying LSB strategy.
+    ///
+    /// This method allows you to specify which bit position to modify during LSB
+    /// embedding. Lower indices provide better visual quality while higher indices
+    /// may offer security through obscurity but with visual artifacts.
+    ///
+    /// # Parameters
+    /// - `bit_index`: The bit position to modify (0-7, where 0 is least significant)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::{EmbeddingOptions, strategy::lsb::BitIndex};
+    ///
+    /// // Use bit index 1 for potentially better security
+    /// let options = EmbeddingOptions::linear()
+    ///     .with_bit_index(BitIndex::Bit1);
+    ///
+    /// // Can be combined with other fluent methods
+    /// let options = EmbeddingOptions::random_with_password("secret")
+    ///     .with_bit_index(BitIndex::Bit2)
+    ///     .with_xor_string("encryption_key");
+    /// ```
+    pub fn with_bit_index(mut self, bit_index: crate::strategy::lsb::BitIndex) -> Self {
+        match &mut self.strategy {
+            Strategy::LSB(config) => {
+                *config = std::mem::take(config).with_bit_index(bit_index);
+            }
+        }
+        self
+    }
+
+    /// Conditionally set password if provided (fluent version).
+    ///
+    /// This is a convenience method for scenarios where a password might be optional.
+    /// If `Some(password)` is provided, the underlying strategy will be configured
+    /// to use password-derived seeding. If `None`, the strategy remains unchanged.
+    ///
+    /// Only works with random LSB strategies. Has no effect on linear strategies.
+    ///
+    /// # Parameters
+    /// - `password`: Optional password string
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::EmbeddingOptions;
+    ///
+    /// // With password
+    /// let password = Some("my_password".to_string());
+    /// let options = EmbeddingOptions::random()
+    ///     .with_password_if_some(password);
+    ///
+    /// // Without password (no change to strategy)
+    /// let no_password: Option<String> = None;
+    /// let options = EmbeddingOptions::random()
+    ///     .with_password_if_some(no_password);
+    /// ```
+    pub fn with_password_if_some<S: Into<String>>(mut self, password: Option<S>) -> Self {
+        if let Some(pwd) = password {
+            match &mut self.strategy {
+                Strategy::LSB(config) => {
+                    *config = std::mem::take(config).with_password(pwd.into());
+                }
+            }
+        }
+        self
     }
 }
 
@@ -238,14 +508,9 @@ impl EmbeddingOptions {
 /// This is the primary extraction function for most use cases, providing a simple
 /// interface that handles file I/O and format detection automatically.
 ///
-/// # Arguments
-///
-/// * `png_path` - Path to the PNG file containing the embedded payload
-///
 /// # Returns
 ///
-/// Returns a tuple containing:
-/// - `Vec<u8>` - The extracted payload data
+/// Returns a `Vec<u8>` with the extracted payload data.
 ///
 /// # Examples
 ///
@@ -265,13 +530,7 @@ impl EmbeddingOptions {
 /// - No embedded payload is found in the image
 /// - The embedded data is corrupted or incomplete
 /// - File I/O operations fail
-///
-/// # Performance Notes
-///
-/// - File I/O operations may be slower than memory-based alternatives
-/// - Consider using [`extract_payload_from_bytes`] for in-memory operations
-/// - Extraction time depends on the embedding pattern used (linear vs random)
-pub fn extract_payload_from_file(png_path: &str) -> Result<Vec<u8>, PngerError> {
+pub fn extract_payload_from_file<P: AsRef<Path>>(png_path: P) -> Result<Vec<u8>, PngerError> {
     extract_payload_from_file_with_options(png_path, EmbeddingOptions::default())
 }
 
@@ -281,15 +540,9 @@ pub fn extract_payload_from_file(png_path: &str) -> Result<Vec<u8>, PngerError> 
 /// you to specify the embedding strategy and obfuscation settings that were used
 /// during embedding. This is essential when non-default settings were used.
 ///
-/// # Arguments
-///
-/// * `png_path` - Path to the PNG file containing the embedded payload
-/// * `options` - Embedding options specifying strategy and obfuscation settings
-///
 /// # Returns
 ///
-/// Returns a tuple containing:
-/// - `Vec<u8>` - The extracted and deobfuscated payload data
+/// Returns a `Vec<u8>` with the extracted payload data.
 ///
 /// # Examples
 ///
@@ -332,8 +585,8 @@ pub fn extract_payload_from_file(png_path: &str) -> Result<Vec<u8>, PngerError> 
 /// - Obfuscation settings don't match those used during embedding
 /// - No embedded payload is found
 /// - File I/O operations fail
-pub fn extract_payload_from_file_with_options(
-    png_path: &str,
+pub fn extract_payload_from_file_with_options<P: AsRef<Path>>(
+    png_path: P,
     options: EmbeddingOptions,
 ) -> Result<Vec<u8>, PngerError> {
     let png_data = read_file(png_path)?;
@@ -349,14 +602,9 @@ pub fn extract_payload_from_file_with_options(
 /// This is the core extraction function used internally by the file-based API and
 /// provides the foundation for all extraction operations.
 ///
-/// # Arguments
-///
-/// * `png_data` - Raw PNG file data as bytes
-///
 /// # Returns
 ///
-/// Returns a tuple containing:
-/// - `Vec<u8>` - The extracted payload data
+/// Returns a `Vec<u8>` with the extracted payload data.
 ///
 /// # Examples
 ///
@@ -382,7 +630,7 @@ pub fn extract_payload_from_file_with_options(
 /// - Faster than file-based operations (no I/O overhead)
 /// - Memory usage scales with PNG size
 /// - Consider memory constraints with very large images
-pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<Vec<u8>, PngerError> {
+pub fn extract_payload_from_bytes<P: AsRef<[u8]>>(png_data: P) -> Result<Vec<u8>, PngerError> {
     extract_payload_from_bytes_with_options(png_data, EmbeddingOptions::default())
 }
 
@@ -393,15 +641,9 @@ pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<Vec<u8>, PngerError
 /// all other extraction functions and handles advanced scenarios like password
 /// protection and payload obfuscation.
 ///
-/// # Arguments
-///
-/// * `png_data` - Raw PNG file data as bytes
-/// * `options` - Embedding options specifying extraction strategy and deobfuscation settings
-///
 /// # Returns
 ///
-/// Returns a tuple containing:
-/// - `Vec<u8>` - The extracted and deobfuscated payload data
+/// Returns a `Vec<u8>` with the extracted payload data.
 ///
 /// # Examples
 ///
@@ -409,7 +651,7 @@ pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<Vec<u8>, PngerError
 ///
 /// ```no_run
 /// use pnger::{extract_payload_from_bytes_with_options, EmbeddingOptions, Strategy, Obfuscation};
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// let png_data = std::fs::read("complex_image.png")?;
 ///
@@ -417,7 +659,7 @@ pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<Vec<u8>, PngerError
 /// let strategy = Strategy::LSB(
 ///     LSBConfig::random()
 ///         .with_password("my_secret_password".to_string())
-///         .with_bit_index(2)
+///         .with_bit_index(BitIndex::Bit2)
 /// );
 /// let obfuscation = Obfuscation::Xor { key: b"encryption_key".to_vec() };
 /// let options = EmbeddingOptions::new_with_obfuscation(strategy, obfuscation);
@@ -463,11 +705,11 @@ pub fn extract_payload_from_bytes(png_data: &[u8]) -> Result<Vec<u8>, PngerError
 /// - Obfuscation keys must match exactly (case-sensitive)
 /// - Failed extraction may indicate wrong credentials or corrupted data
 /// - Consider implementing retry logic with different parameters if needed
-pub fn extract_payload_from_bytes_with_options(
-    png_data: &[u8],
+pub fn extract_payload_from_bytes_with_options<P: AsRef<[u8]>>(
+    png_data: P,
     options: EmbeddingOptions,
 ) -> Result<Vec<u8>, PngerError> {
-    let (mut reader, _) = decode_png_info(png_data)?;
+    let (mut reader, _) = decode_png_info(png_data.as_ref())?;
     let mut image_data = read_image_data(&mut reader)?;
 
     let payload_data = match options.strategy {
@@ -492,11 +734,6 @@ pub fn extract_payload_from_bytes_with_options(
 ///
 /// This is the primary embedding function for most use cases, providing a simple
 /// interface that handles file I/O operations automatically while maintaining good security.
-///
-/// # Arguments
-///
-/// * `png_path` - Path to the source PNG file to modify
-/// * `payload_data` - Raw bytes to embed in the image
 ///
 /// # Returns
 ///
@@ -552,7 +789,10 @@ pub fn extract_payload_from_bytes_with_options(
 /// - File I/O operations add overhead compared to memory-based functions
 /// - Random patterns are slightly slower than linear due to PRNG operations
 /// - Consider using [`embed_payload_from_bytes`] for better performance in batch operations
-pub fn embed_payload_from_file(png_path: &str, payload_data: &[u8]) -> Result<Vec<u8>, PngerError> {
+pub fn embed_payload_from_file<P: AsRef<Path>, D: AsRef<[u8]>>(
+    png_path: P,
+    payload_data: D,
+) -> Result<Vec<u8>, PngerError> {
     embed_payload_from_file_with_options(png_path, payload_data, EmbeddingOptions::default())
 }
 
@@ -561,12 +801,6 @@ pub fn embed_payload_from_file(png_path: &str, payload_data: &[u8]) -> Result<Ve
 /// This function provides advanced control over the embedding process, allowing you
 /// to specify the embedding strategy, obfuscation settings, and other parameters.
 /// It's ideal for scenarios requiring specific security or performance characteristics.
-///
-/// # Arguments
-///
-/// * `png_path` - Path to the source PNG file to modify
-/// * `payload_data` - Raw bytes to embed in the image  
-/// * `options` - Embedding options specifying strategy and obfuscation settings
 ///
 /// # Returns
 ///
@@ -593,13 +827,13 @@ pub fn embed_payload_from_file(png_path: &str, payload_data: &[u8]) -> Result<Ve
 ///
 /// ```no_run
 /// use pnger::{embed_payload_from_file_with_options, EmbeddingOptions, Strategy};
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// let payload = b"Highly secure secret data";
 /// let strategy = Strategy::LSB(
 ///     LSBConfig::random()
 ///         .with_password("my_secret_password".to_string())
-///         .with_bit_index(2)  // Use bit position 2 instead of 0
+///         .with_bit_index(BitIndex::Bit2)  // Use bit position 2 instead of 0
 /// );
 /// let options = EmbeddingOptions::new(strategy);
 ///
@@ -630,7 +864,7 @@ pub fn embed_payload_from_file(png_path: &str, payload_data: &[u8]) -> Result<Ve
 /// - The PNG file cannot be read or doesn't exist
 /// - The file is not a valid PNG image
 /// - The payload is too large for the image capacity
-/// - Invalid embedding parameters (e.g., bit_index > 7)
+/// - Invalid embedding parameters (e.g., `bit_index` > 7)
 /// - Cryptographic operations fail (password derivation, seed generation)
 /// - File I/O or PNG processing operations fail
 ///
@@ -651,9 +885,9 @@ pub fn embed_payload_from_file(png_path: &str, payload_data: &[u8]) -> Result<Ve
 ///
 /// - Index 0 (LSB): Most common, good invisibility vs capacity trade-off
 /// - Higher indices: Less capacity, potentially more visible, but less predictable
-pub fn embed_payload_from_file_with_options(
-    png_path: &str,
-    payload_data: &[u8],
+pub fn embed_payload_from_file_with_options<P: AsRef<Path>, D: AsRef<[u8]>>(
+    png_path: P,
+    payload_data: D,
     options: EmbeddingOptions,
 ) -> Result<Vec<u8>, PngerError> {
     let png_data = read_file(png_path)?;
@@ -669,11 +903,6 @@ pub fn embed_payload_from_file_with_options(
 ///
 /// This is the core embedding function used internally by the file-based API and
 /// provides the foundation for all embedding operations.
-///
-/// # Arguments
-///
-/// * `png_data` - Raw PNG file data as bytes
-/// * `payload_data` - Raw bytes to embed in the image
 ///
 /// # Returns
 ///
@@ -716,9 +945,9 @@ pub fn embed_payload_from_file_with_options(
 /// Practical capacity is lower due to header overhead:
 /// - Small images (< 100KB): ~60-80% of theoretical capacity
 /// - Large images (> 1MB): ~90-95% of theoretical capacity
-pub fn embed_payload_from_bytes(
-    png_data: &[u8],
-    payload_data: &[u8],
+pub fn embed_payload_from_bytes<P: AsRef<[u8]>, D: AsRef<[u8]>>(
+    png_data: P,
+    payload_data: D,
 ) -> Result<Vec<u8>, PngerError> {
     embed_payload_from_bytes_with_options(png_data, payload_data, EmbeddingOptions::default())
 }
@@ -730,12 +959,6 @@ pub fn embed_payload_from_bytes(
 /// scenarios including custom strategies, password protection, obfuscation, and
 /// fine-tuned embedding parameters.
 ///
-/// # Arguments
-///
-/// * `png_data` - Raw PNG file data as bytes
-/// * `payload_data` - Raw bytes to embed in the image
-/// * `options` - Embedding options specifying strategy and obfuscation settings
-///
 /// # Returns
 ///
 /// Returns the modified PNG data as bytes with the embedded payload.
@@ -746,7 +969,7 @@ pub fn embed_payload_from_bytes(
 ///
 /// ```no_run
 /// use pnger::{embed_payload_from_bytes_with_options, EmbeddingOptions, Strategy, Obfuscation};
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// let png_bytes = [137u8, 80u8, 78u8, 71u8, 13u8, 10u8, 26u8, 10u8, /* ... */];
 /// let payload = b"super_secret_payload";
@@ -755,7 +978,7 @@ pub fn embed_payload_from_bytes(
 /// let strategy = Strategy::LSB(
 ///     LSBConfig::random()
 ///         .with_password("ultra_secure_password_123".to_string())
-///         .with_bit_index(2)  // Use less predictable bit position
+///         .with_bit_index(BitIndex::Bit2)  // Use less predictable bit position
 /// );
 /// let obfuscation = Obfuscation::Xor {
 ///     key: b"additional_encryption_layer".to_vec()
@@ -787,17 +1010,17 @@ pub fn embed_payload_from_bytes(
 ///
 /// ```no_run
 /// use pnger::{embed_payload_from_bytes_with_options, EmbeddingOptions, Strategy};
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// let mut png_data = std::fs::read("source.png")?;
 ///
 /// // Embed first payload in bit 0
-/// let strategy1 = Strategy::LSB(LSBConfig::linear().with_bit_index(0));
+/// let strategy1 = Strategy::LSB(LSBConfig::linear().with_bit_index(BitIndex::Bit0));
 /// let options1 = EmbeddingOptions::new(strategy1);
 /// png_data = embed_payload_from_bytes_with_options(&png_data, b"First payload", options1)?;
 ///
 /// // Embed second payload in bit 1 (same image)
-/// let strategy2 = Strategy::LSB(LSBConfig::linear().with_bit_index(1));
+/// let strategy2 = Strategy::LSB(LSBConfig::linear().with_bit_index(BitIndex::Bit1));
 /// let options2 = EmbeddingOptions::new(strategy2);
 /// png_data = embed_payload_from_bytes_with_options(&png_data, b"Second payload", options2)?;
 ///
@@ -810,7 +1033,7 @@ pub fn embed_payload_from_bytes(
 /// This function will return an error if:
 /// - The data is not valid PNG format
 /// - The payload is too large for the image capacity
-/// - Invalid embedding parameters (bit_index > 7, empty password, etc.)
+/// - Invalid embedding parameters (`bit_index` > 7, empty password, etc.)
 /// - Cryptographic operations fail (PRNG, password derivation)
 /// - PNG processing operations fail
 /// - Memory allocation fails
@@ -852,16 +1075,16 @@ pub fn embed_payload_from_bytes(
 /// - **Security**: Moderate (depends on key strength)
 /// - **Performance**: Excellent (simple bitwise operations)
 /// - **Use case**: Additional security layer, key-based access control
-pub fn embed_payload_from_bytes_with_options(
-    png_data: &[u8],
-    payload_data: &[u8],
+pub fn embed_payload_from_bytes_with_options<P: AsRef<[u8]>, D: AsRef<[u8]>>(
+    png_data: P,
+    payload_data: D,
     options: EmbeddingOptions,
 ) -> Result<Vec<u8>, PngerError> {
-    let (mut reader, info) = decode_png_info(png_data)?;
+    let (mut reader, info) = decode_png_info(png_data.as_ref())?;
     let mut image_data = read_image_data(&mut reader)?;
     let payload_data = match options.obfuscation {
         Some(obfuscation) => &obfuscation::obfuscate_payload(payload_data, obfuscation),
-        _ => payload_data,
+        _ => payload_data.as_ref(),
     };
 
     match options.strategy {
@@ -878,10 +1101,6 @@ type DecodedPngInfo<'a> = Result<(png::Reader<Cursor<&'a [u8]>>, png::Info<'a>),
 ///
 /// This internal function handles the initial PNG decoding step, creating a reader
 /// and extracting metadata needed for subsequent embedding or extraction operations.
-///
-/// # Arguments
-///
-/// * `png_data` - Raw PNG file data as bytes
 ///
 /// # Returns
 ///
@@ -907,10 +1126,6 @@ fn decode_png_info(png_data: &[u8]) -> DecodedPngInfo {
 /// steganographic operations. The data is returned in the format expected
 /// by the embedding and extraction algorithms.
 ///
-/// # Arguments
-///
-/// * `reader` - PNG reader positioned after header parsing
-///
 /// # Returns
 ///
 /// Returns the raw image data as a byte vector, or an error if reading fails.
@@ -932,11 +1147,6 @@ fn read_image_data(reader: &mut png::Reader<Cursor<&[u8]>>) -> Result<Vec<u8>, P
 /// This function takes modified image data (after embedding operations) and
 /// reconstructs a valid PNG file with the same format characteristics as the
 /// original image.
-///
-/// # Arguments
-///
-/// * `info` - PNG format information from the original image
-/// * `image_data` - Modified pixel data containing embedded payload
 ///
 /// # Returns
 ///

@@ -19,12 +19,30 @@
 //! - **Password-derived seeds** offer security without storing sensitive data in the image
 //! - **Auto-generated seeds** provide maximum entropy but require storage in the image header
 
+/// Standard seed size for LSB cryptographic operations (256 bits)
+pub const SEED_SIZE: usize = 32;
+
+/// Standard salt size for password-based key derivation  
+pub const SALT_SIZE: usize = 16;
+
+/// Argon2 memory cost parameter (64MB)
+pub const ARGON2_MEMORY_COST: u32 = 65536;
+
+/// Argon2 time cost parameter (iterations)
+pub const ARGON2_TIME_COST: u32 = 2;
+
+/// Argon2 parallelism parameter (threads)
+pub const ARGON2_PARALLELISM: u32 = 1;
+
+mod bit_index;
 #[doc(hidden)]
 pub mod crypto;
 mod data;
 mod header;
 #[doc(hidden)]
 pub mod utils;
+
+pub use bit_index::BitIndex;
 
 use crate::{error::PngerError, strategy::lsb::data::BodyEmbedder};
 
@@ -45,19 +63,19 @@ use crate::{error::PngerError, strategy::lsb::data::BodyEmbedder};
 ///
 /// ## Random Pattern with Password
 /// ```rust
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// let config = LSBConfig::random()
 ///     .with_password("secret_password".to_string())
-///     .with_bit_index(2);
+///     .with_bit_index(BitIndex::Bit2);
 /// ```
 ///
 /// ## Custom Bit Position
 /// ```rust
-/// use pnger::strategy::lsb::LSBConfig;
+/// use pnger::strategy::lsb::{LSBConfig, BitIndex};
 ///
 /// // Use bit index 1 instead of 0 for potentially better imperceptibility
-/// let config = LSBConfig::linear().with_bit_index(1);
+/// let config = LSBConfig::linear().with_bit_index(BitIndex::Bit1);
 /// ```
 ///
 /// # Performance vs Security Trade-offs
@@ -70,7 +88,7 @@ use crate::{error::PngerError, strategy::lsb::data::BodyEmbedder};
 /// Choose linear patterns for speed, random patterns for security.
 #[derive(Debug, Clone)]
 pub struct LSBConfig {
-    bit_index: u8,
+    bit_index: BitIndex,
     pattern: EmbeddingPattern,
 }
 
@@ -139,6 +157,13 @@ pub enum EmbeddingPattern {
     Random(RandomConfig),
 }
 
+impl Default for EmbeddingPattern {
+    /// Linear pattern by default for predictable behavior.
+    fn default() -> Self {
+        Self::Linear
+    }
+}
+
 /// Configuration for random embedding patterns.
 ///
 /// Controls how the pseudorandom sequence is generated for determining
@@ -153,6 +178,15 @@ pub enum EmbeddingPattern {
 #[derive(Debug, Clone)]
 pub struct RandomConfig {
     seed_source: SeedSource,
+}
+
+impl Default for RandomConfig {
+    /// Random configuration with automatic seed generation.
+    fn default() -> Self {
+        Self {
+            seed_source: SeedSource::default(),
+        }
+    }
 }
 
 /// Source for generating pseudorandom embedding seeds.
@@ -247,7 +281,14 @@ pub enum SeedSource {
     ///
     /// **Best for:** Advanced users, testing, integration with
     /// existing key management systems.
-    Manual([u8; 32]),
+    Manual([u8; SEED_SIZE]),
+}
+
+impl Default for SeedSource {
+    /// Automatic seed generation by default for security.
+    fn default() -> Self {
+        Self::Auto
+    }
 }
 
 // Builder pattern implementations for LSBConfig
@@ -259,29 +300,23 @@ impl LSBConfig {
     /// but creates detectable statistical patterns.
     ///
     /// # Default Settings
-    /// - Bit index: 0 (least significant bit)
+    /// - Bit index: `BitIndex::LSB` (least significant bit)
     /// - Pattern: Linear (sequential)
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use pnger::strategy::lsb::LSBConfig;
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
     ///
     /// // Basic linear configuration
     /// let config = LSBConfig::linear();
     ///
     /// // Linear with custom bit position
-    /// let config = LSBConfig::linear().with_bit_index(1);
+    /// let config = LSBConfig::linear().with_bit_index(BitIndex::Bit1);
     /// ```
-    ///
-    /// # Performance Characteristics
-    /// - **Embedding speed**: Fastest
-    /// - **Extraction speed**: Fastest
-    /// - **Memory usage**: Minimal
-    /// - **Security**: Lowest (easily detectable)
-    pub fn linear() -> Self {
+    pub const fn linear() -> Self {
         Self {
-            bit_index: 0,
+            bit_index: BitIndex::LSB,
             pattern: EmbeddingPattern::Linear,
         }
     }
@@ -293,14 +328,14 @@ impl LSBConfig {
     /// performance. By default, uses an auto-generated seed.
     ///
     /// # Default Settings
-    /// - Bit index: 0 (least significant bit)
+    /// - Bit index: `BitIndex::LSB` (least significant bit)
     /// - Pattern: Random with auto-generated seed
     /// - Seed storage: Embedded in image header
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use pnger::strategy::lsb::LSBConfig;
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
     ///
     /// // Random with auto-generated seed
     /// let config = LSBConfig::random();
@@ -318,44 +353,70 @@ impl LSBConfig {
     /// - Resistant to visual detection
     /// - Harder to analyze statistically
     /// - Distributes changes across entire image
-    pub fn random() -> Self {
+    pub const fn random() -> Self {
         Self {
-            bit_index: 0,
+            bit_index: BitIndex::LSB,
             pattern: EmbeddingPattern::Random(RandomConfig {
                 seed_source: SeedSource::Auto,
             }),
         }
     }
 
-    /// Set the bit index position for embedding (0-7).
+    /// Create a const random configuration with manual seed.
+    /// For runtime random generation, use `random()`.
     ///
-    /// Determines which bit position in each color channel will be modified.
-    /// Lower indices (0-2) provide better capacity but are more detectable.
-    /// Higher indices (3-7) are more detectable but may corrupt the image.
-    ///
-    /// # Parameters
-    /// - `index`: Bit position (0 = least significant, 7 = most significant)
+    /// This is useful for compile-time configuration and testing
+    /// with deterministic seeds.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use pnger::strategy::lsb::LSBConfig;
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
+    ///
+    /// const SEED: [u8; 32] = [42; 32]; // Don't use this in production!
+    /// const CONFIG: LSBConfig = LSBConfig::random_with_manual_seed(SEED);
+    /// ```
+    pub const fn random_with_manual_seed(seed: [u8; SEED_SIZE]) -> Self {
+        Self {
+            bit_index: BitIndex::LSB,
+            pattern: EmbeddingPattern::Random(RandomConfig {
+                seed_source: SeedSource::Manual(seed),
+            }),
+        }
+    }
+
+    /// Set the bit index position for embedding.
+    ///
+    /// Determines which bit position in each color channel will be modified.
+    /// Lower indices (Bit0-Bit2) provide better capacity but are more detectable.
+    /// Higher indices (Bit3+) are more detectable but may corrupt the image.
+    ///
+    /// # Parameters
+    /// - `index`: `BitIndex` variant specifying the target bit position
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
     ///
     /// // Use the 2nd least significant bit
-    /// let config = LSBConfig::linear().with_bit_index(1);
+    /// let config = LSBConfig::linear().with_bit_index(BitIndex::Bit1);
     ///
     /// // Use the 3rd least significant bit for more security
-    /// let config = LSBConfig::random().with_bit_index(2);
+    /// let config = LSBConfig::random().with_bit_index(BitIndex::Bit2);
+    ///
+    /// // Use the LSB alias for convenience
+    /// let config = LSBConfig::linear().with_bit_index(BitIndex::LSB);
     /// ```
     ///
     /// # Bit Index Recommendations
-    /// | Index | Visual Impact | Detectability | Recommended Use |
-    /// |-------|---------------|---------------|------------------|
-    /// | 0     | Minimal       | Low           | General purpose |
-    /// | 1     | Minimal       | Medium        | Better security |
-    /// | 2     | Low           | Medium        | High security   |
-    /// | 3+    | Noticeable    | High          | Not recommended |
-    pub fn with_bit_index(mut self, index: u8) -> Self {
+    /// | BitIndex | Visual Impact | Detectability | Recommended Use |
+    /// |----------|---------------|---------------|------------------|
+    /// | Bit0/LSB | Minimal       | Low           | General purpose |
+    /// | Bit1     | Minimal       | Medium        | Better security |
+    /// | Bit2     | Low           | Medium        | High security   |
+    /// | Bit3+    | Noticeable    | High          | Not recommended |
+    pub fn with_bit_index(mut self, index: BitIndex) -> Self {
         self.bit_index = index;
         self
     }
@@ -381,7 +442,7 @@ impl LSBConfig {
     /// # Examples
     ///
     /// ```rust
-    /// use pnger::strategy::lsb::LSBConfig;
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
     ///
     /// let config = LSBConfig::random()
     ///     .with_password("my_secure_password".to_string());
@@ -389,7 +450,7 @@ impl LSBConfig {
     /// // Can be chained with other options
     /// let config = LSBConfig::random()
     ///     .with_password("secret".to_string())
-    ///     .with_bit_index(1);
+    ///     .with_bit_index(BitIndex::Bit1);
     /// ```
     ///
     /// # Password Guidelines
@@ -439,7 +500,7 @@ impl LSBConfig {
     /// - Integration with existing key management
     /// - Custom seed derivation schemes
     /// - Compliance with specific randomness requirements
-    pub fn with_seed(mut self, seed: [u8; 32]) -> Self {
+    pub fn with_seed(mut self, seed: [u8; SEED_SIZE]) -> Self {
         if let EmbeddingPattern::Random(ref mut config) = self.pattern {
             config.seed_source = SeedSource::Manual(seed);
         }
@@ -493,7 +554,7 @@ impl LSBConfig {
     /// let config = LSBConfig::random().with_seed_if_some(no_seed);
     /// // This config will still use auto-generated seed
     /// ```
-    pub fn with_seed_if_some(self, seed: Option<[u8; 32]>) -> Self {
+    pub fn with_seed_if_some(self, seed: Option<[u8; SEED_SIZE]>) -> Self {
         match seed {
             Some(seed) => self.with_seed(seed),
             None => self,
@@ -502,21 +563,24 @@ impl LSBConfig {
 
     /// Get the configured bit index.
     ///
-    /// Returns the bit position (0-7) that will be modified during
-    /// embedding operations.
+    /// Returns the `BitIndex` that will be modified during embedding operations.
     ///
     /// # Returns
-    /// Bit index where 0 is the least significant bit and 7 is the most significant.
+    /// `BitIndex` variant representing the target bit position.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// use pnger::strategy::lsb::LSBConfig;
+    /// use pnger::strategy::lsb::{LSBConfig, BitIndex};
     ///
-    /// let config = LSBConfig::linear().with_bit_index(2);
-    /// assert_eq!(config.bit_index(), 2);
+    /// let config = LSBConfig::linear().with_bit_index(BitIndex::Bit2);
+    /// assert_eq!(config.bit_index(), BitIndex::Bit2);
+    ///
+    /// // Using the LSB alias
+    /// let config = LSBConfig::linear().with_bit_index(BitIndex::LSB);
+    /// assert_eq!(config.bit_index(), BitIndex::Bit0);
     /// ```
-    pub fn bit_index(&self) -> u8 {
+    pub fn bit_index(&self) -> BitIndex {
         self.bit_index
     }
 
@@ -526,7 +590,7 @@ impl LSBConfig {
     /// associated configuration options.
     ///
     /// # Returns
-    /// Reference to the EmbeddingPattern enum variant.
+    /// Reference to the `EmbeddingPattern` enum variant.
     ///
     /// # Examples
     ///
@@ -569,18 +633,21 @@ impl Default for LSBConfig {
 // Internal runtime configuration for optimized implementation
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeConfig {
-    bit_index: u8,
+    bit_index: BitIndex,
     pattern: RuntimePattern,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum RuntimePattern {
     Linear,
-    Random { seed: [u8; 32], embed_seed: bool },
+    Random {
+        seed: [u8; SEED_SIZE],
+        embed_seed: bool,
+    },
 }
 
 impl RuntimeConfig {
-    /// Convert from user-facing LSBConfig to internal RuntimeConfig
+    /// Convert from user-facing `LSBConfig` to internal `RuntimeConfig`
     fn from_config(config: &LSBConfig) -> Result<Self, PngerError> {
         let pattern = match &config.pattern {
             EmbeddingPattern::Linear => RuntimePattern::Linear,
@@ -611,7 +678,7 @@ impl RuntimeConfig {
 }
 
 impl RuntimePattern {
-    /// Creates a RuntimePattern by analyzing the image header and user config.
+    /// Creates a `RuntimePattern` by analyzing the image header and user config.
     fn from_header_and_config(
         header: &header::CompleteHeader,
         config: &LSBConfig,
@@ -642,7 +709,7 @@ impl RuntimePattern {
     fn reconstruct_seed(
         header: &header::CompleteHeader,
         config: &LSBConfig,
-    ) -> Result<[u8; 32], PngerError> {
+    ) -> Result<[u8; SEED_SIZE], PngerError> {
         let seed_was_embedded = header
             .fixed
             .flags
@@ -682,8 +749,8 @@ impl RuntimePattern {
 ///
 /// # Design Philosophy
 ///
-/// The LSBEmbedder uses a stateless design where all configuration is provided
-/// through the LSBConfig parameter. This ensures thread safety and makes the
+/// The `LSBEmbedder` uses a stateless design where all configuration is provided
+/// through the `LSBConfig` parameter. This ensures thread safety and makes the
 /// API predictable and testable.
 ///
 /// # Examples
@@ -706,7 +773,7 @@ impl RuntimePattern {
 ///
 /// ## Security-Focused Usage
 /// ```rust
-/// use pnger::strategy::lsb::{LSBEmbedder, LSBConfig};
+/// use pnger::strategy::lsb::{LSBEmbedder, LSBConfig, BitIndex};
 ///
 /// let mut image_data = vec![0u8; 1000];
 /// let payload = b"Secret message";
@@ -766,7 +833,7 @@ pub struct EmbedResult {
 
     /// Whether the random seed was embedded in the image header.
     ///
-    /// - `true`: Auto-generated seed stored in image (SeedSource::Auto)
+    /// - `true`: Auto-generated seed stored in image (`SeedSource::Auto`)
     /// - `false`: Password or manual seed used (no seed storage needed)
     pub seed_embedded: bool,
 }
@@ -860,14 +927,14 @@ impl LSBEmbedder {
     ///
     /// ## Secure Random Embedding
     /// ```rust
-    /// use pnger::strategy::lsb::{LSBEmbedder, LSBConfig};
+    /// use pnger::strategy::lsb::{LSBEmbedder, LSBConfig, BitIndex};
     ///
     /// let mut image = vec![0u8; 1000];
     /// let payload = b"Secret data";
     ///
     /// let config = LSBConfig::random()
     ///     .with_password("my_password".to_string())
-    ///     .with_bit_index(1);
+    ///     .with_bit_index(BitIndex::Bit1);
     ///     
     /// let result = LSBEmbedder::embed(&mut image, payload, &config).unwrap();
     /// assert!(!result.seed_embedded); // Password-derived, no seed storage
@@ -897,12 +964,8 @@ impl LSBEmbedder {
 
         let header_bytes_used = header::HeaderEmbedder::new(header_data, runtime_config.clone())
             .embed(payload.len() as u32)?;
-        BodyEmbedder::new(
-            body_data,
-            runtime_config.pattern.clone(),
-            runtime_config.bit_index,
-        )
-        .embed_payload(payload)?;
+        BodyEmbedder::new(body_data, &runtime_config.pattern, runtime_config.bit_index)
+            .embed_payload(payload);
 
         Ok(EmbedResult {
             bytes_used: header_bytes_used + (payload.len() * 8),
@@ -989,8 +1052,8 @@ impl LSBEmbedder {
 
         // Phase 4: Extract payload using runtime config
         let body_data = &mut image_data[header_size..];
-        let mut body_embedder = BodyEmbedder::new(body_data, runtime_pattern, config.bit_index);
-        let payload = body_embedder.extract_payload(complete_header.fixed.payload_size as usize)?;
+        let mut body_embedder = BodyEmbedder::new(body_data, &runtime_pattern, config.bit_index);
+        let payload = body_embedder.extract_payload(complete_header.fixed.payload_size as usize);
 
         Ok(ExtractResult {
             payload,
@@ -1012,6 +1075,13 @@ impl LSBEmbedder {
     /// let mut image = vec![0u8; 1000];
     /// let result = LSBEmbedder::embed_linear(&mut image, b"test").unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - `PngerError::InsufficientCapacity`: Image too small for payload
+    /// - `PngerError::CryptoError`: Seed generation or derivation failed  
+    /// - `PngerError::InvalidFormat`: Invalid configuration parameters
     pub fn embed_linear(image_data: &mut [u8], payload: &[u8]) -> Result<EmbedResult, PngerError> {
         Self::embed(image_data, payload, &LSBConfig::linear())
     }
@@ -1030,6 +1100,13 @@ impl LSBEmbedder {
     /// let result = LSBEmbedder::embed_random(&mut image, b"test").unwrap();
     /// assert!(result.seed_embedded); // Auto seed is embedded
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - `PngerError::InsufficientCapacity`: Image too small for payload
+    /// - `PngerError::CryptoError`: Seed generation or derivation failed  
+    /// - `PngerError::InvalidFormat`: Invalid configuration parameters
     pub fn embed_random(image_data: &mut [u8], payload: &[u8]) -> Result<EmbedResult, PngerError> {
         Self::embed(image_data, payload, &LSBConfig::random())
     }
@@ -1057,6 +1134,13 @@ impl LSBEmbedder {
     /// ).unwrap();
     /// assert!(!result.seed_embedded); // Password-derived, no storage needed
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - `PngerError::InsufficientCapacity`: Image too small for payload
+    /// - `PngerError::CryptoError`: Password derivation failed or weak randomness
+    /// - `PngerError::InvalidFormat`: Invalid configuration parameters
     pub fn embed_with_password(
         image_data: &mut [u8],
         payload: &[u8],
@@ -1083,6 +1167,13 @@ impl LSBEmbedder {
     /// // Then extract
     /// let result = LSBEmbedder::extract_linear(&mut image).unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - `PngerError::InvalidFormat`: Corrupted or missing header
+    /// - `PngerError::CryptoError`: Password/seed mismatch or derivation failure
+    /// - `PngerError::InsufficientData`: Image smaller than expected payload
     pub fn extract_linear(image_data: &mut [u8]) -> Result<ExtractResult, PngerError> {
         Self::extract(image_data, &LSBConfig::linear())
     }
@@ -1109,6 +1200,13 @@ impl LSBEmbedder {
     /// // Then extract with same password
     /// let result = LSBEmbedder::extract_with_password(&mut image, "my_password").unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - `PngerError::InvalidFormat`: Corrupted or missing header
+    /// - `PngerError::CryptoError`: Wrong password or derivation failure  
+    /// - `PngerError::InsufficientData`: Image smaller than expected payload
     pub fn extract_with_password(
         image_data: &mut [u8],
         password: &str,
@@ -1125,13 +1223,13 @@ mod tests {
     #[test]
     fn test_lsb_config_builder_pattern() {
         // Test linear configuration builder
-        let config = LSBConfig::linear().with_bit_index(2);
-        assert_eq!(config.bit_index(), 2);
+        let config = LSBConfig::linear().with_bit_index(BitIndex::Bit2);
+        assert_eq!(config.bit_index(), BitIndex::Bit2);
         assert!(matches!(config.pattern(), EmbeddingPattern::Linear));
 
         // Test random configuration builder
         let config = LSBConfig::random().with_password("test".to_string());
-        assert_eq!(config.bit_index(), 0);
+        assert_eq!(config.bit_index(), BitIndex::LSB);
         match config.pattern() {
             EmbeddingPattern::Random(random_config) => {
                 assert!(matches!(random_config.seed_source, SeedSource::Password(_)));
@@ -1229,7 +1327,7 @@ mod tests {
         // Test that default uses random pattern
         let config = LSBConfig::default();
         assert!(matches!(config.pattern(), EmbeddingPattern::Random(_)));
-        assert_eq!(config.bit_index(), 0);
+        assert_eq!(config.bit_index(), BitIndex::LSB);
     }
 
     #[test]

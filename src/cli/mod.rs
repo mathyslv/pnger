@@ -2,7 +2,10 @@ pub mod lsb;
 
 use anyhow::bail;
 use clap::{Parser, ValueEnum};
-use pnger::{EmbeddingOptions, Obfuscation, strategy::Strategy};
+use pnger::{
+    EmbeddingOptions, Obfuscation,
+    strategy::{Strategy, lsb::SEED_SIZE},
+};
 use std::path::PathBuf;
 
 use lsb::LSBPatternArg;
@@ -125,9 +128,11 @@ impl Cli {
                 let seed = if let Some(seed_hex) = &self.lsb_seed {
                     let seed_bytes = hex::decode(seed_hex)
                         .map_err(|e| anyhow::anyhow!("Invalid hex seed: {}", e))?;
-                    if seed_bytes.len() != 32 {
+                    if seed_bytes.len() != SEED_SIZE {
                         bail!(
-                            "Seed must be exactly 32 bytes (64 hex characters), got {}",
+                            "Seed must be exactly {} bytes ({} hex characters), got {}",
+                            SEED_SIZE,
+                            SEED_SIZE * 2,
                             seed_bytes.len()
                         );
                     }
@@ -163,7 +168,7 @@ impl Cli {
         let strategy = self.get_strategy()?;
         let mut options = EmbeddingOptions::new(strategy);
         if let Some(obfuscation) = self.get_obfuscation() {
-            options.obfuscation(obfuscation);
+            options.set_obfuscation(Some(obfuscation));
         }
         Ok(options)
     }

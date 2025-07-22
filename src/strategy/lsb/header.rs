@@ -4,8 +4,8 @@ use std::io::{Cursor, Read, Write};
 use thiserror::Error;
 
 use crate::{
+    strategy::lsb::{RuntimeConfig, RuntimePattern, SEED_SIZE},
     PayloadSize, PngerError,
-    strategy::lsb::{RuntimeConfig, RuntimePattern},
 };
 
 #[derive(Debug, Error)]
@@ -55,7 +55,6 @@ impl From<HeaderError> for PngerError {
 // Header constants
 const MAGIC: &[u8; 4] = b"PNGR";
 const VERSION: u8 = 1;
-const SEED_SIZE: usize = 32;
 
 // Header field sizes
 const MAGIC_SIZE: usize = 4;
@@ -109,7 +108,7 @@ impl FixedHeader {
         Ok(header)
     }
 
-    pub fn calculate_total_header_size(&self) -> usize {
+    pub const fn calculate_total_header_size(&self) -> usize {
         FIXED_HEADER_SIZE
             + if self.flags.contains(HeaderFlags::SEED_EMBEDDED) {
                 SEED_SIZE
@@ -184,7 +183,7 @@ impl CompleteHeader {
         Ok(Self { fixed, seed })
     }
 
-    pub fn header_size(&self) -> usize {
+    pub const fn header_size(&self) -> usize {
         FIXED_HEADER_SIZE + if self.seed.is_some() { SEED_SIZE } else { 0 }
     }
 }
@@ -196,12 +195,12 @@ pub(super) struct HeaderEmbedder<'a> {
 }
 
 impl<'a> HeaderEmbedder<'a> {
-    pub fn new(bytes: &'a mut [u8], config: RuntimeConfig) -> Self {
+    pub const fn new(bytes: &'a mut [u8], config: RuntimeConfig) -> Self {
         Self { bytes, config }
     }
 
     pub fn embed(&mut self, payload_size: u32) -> Result<usize, HeaderError> {
-        let header = self.build_header(payload_size)?;
+        let header = self.build_header(payload_size);
         let required_size = header.header_size();
 
         if self.bytes.len() < required_size {
@@ -214,7 +213,7 @@ impl<'a> HeaderEmbedder<'a> {
         self.write_header(&header)
     }
 
-    fn build_header(&self, payload_size: u32) -> Result<CompleteHeader, HeaderError> {
+    fn build_header(&self, payload_size: u32) -> CompleteHeader {
         let mut flags = HeaderFlags::empty();
         let mut embedded_seed = None;
 
@@ -234,10 +233,10 @@ impl<'a> HeaderEmbedder<'a> {
         };
         fixed.crc32 = fixed.calculate_crc();
 
-        Ok(CompleteHeader {
+        CompleteHeader {
             fixed,
             seed: embedded_seed,
-        })
+        }
     }
 
     fn write_header(&mut self, header: &CompleteHeader) -> Result<usize, HeaderError> {
@@ -258,7 +257,7 @@ impl<'a> HeaderEmbedder<'a> {
         Ok(cursor.position() as usize)
     }
 
-    pub fn required_size(config: &RuntimeConfig) -> usize {
+    pub const fn required_size(config: &RuntimeConfig) -> usize {
         FIXED_HEADER_SIZE
             + if matches!(
                 config.pattern,

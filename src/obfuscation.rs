@@ -72,16 +72,14 @@ pub enum Obfuscation {
 /// obfuscation algorithm, making it suitable for steganographic embedding
 /// with enhanced security.
 ///
-/// # Arguments
-///
-/// * `payload_data` - The raw payload data to obfuscate
-/// * `obfuscation` - The obfuscation method and configuration to use
-///
 /// # Returns
 ///
 /// Returns the obfuscated payload data. The output size is identical to the
 /// input size for all current obfuscation methods.
-pub(crate) fn obfuscate_payload(payload_data: &[u8], obfuscation: Obfuscation) -> Vec<u8> {
+pub(crate) fn obfuscate_payload<P: AsRef<[u8]>>(
+    payload_data: P,
+    obfuscation: Obfuscation,
+) -> Vec<u8> {
     match obfuscation {
         Obfuscation::Xor { key } => xor_payload(payload_data, &key),
     }
@@ -102,7 +100,10 @@ pub(crate) fn obfuscate_payload(payload_data: &[u8], obfuscation: Obfuscation) -
 ///
 /// Returns the original payload data. For XOR obfuscation, this is guaranteed
 /// to be identical to the original input.
-pub(crate) fn deobfuscate_payload(payload_data: &[u8], obfuscation: Obfuscation) -> Vec<u8> {
+pub(crate) fn deobfuscate_payload<P: AsRef<[u8]>>(
+    payload_data: P,
+    obfuscation: Obfuscation,
+) -> Vec<u8> {
     match obfuscation {
         Obfuscation::Xor { key } => xor_payload(payload_data, &key),
     }
@@ -121,13 +122,14 @@ pub(crate) fn deobfuscate_payload(payload_data: &[u8], obfuscation: Obfuscation)
 /// # Returns
 ///
 /// Returns the XOR-transformed data.
-pub(crate) fn xor_payload(payload_data: &[u8], key: &[u8]) -> Vec<u8> {
-    if key.is_empty() {
-        return payload_data.to_vec();
+pub(crate) fn xor_payload<P: AsRef<[u8]>, K: AsRef<[u8]>>(payload_data: P, key: K) -> Vec<u8> {
+    if key.as_ref().is_empty() {
+        return payload_data.as_ref().to_vec();
     }
     payload_data
+        .as_ref()
         .iter()
-        .zip(key.iter().cycle())
+        .zip(key.as_ref().iter().cycle())
         .map(|(byte, key_byte)| byte ^ key_byte)
         .collect()
 }

@@ -132,9 +132,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut options = EmbeddingOptions::new(strategy);
     
     // Add XOR obfuscation
-    options.obfuscation(Obfuscation::Xor { 
+    options.set_obfuscation(Some(Obfuscation::Xor { 
         key: b"secretkey".to_vec() 
-    });
+    }));
     
     // Linear pattern with custom bit index
     let strategy = EmbeddingStrategy::Linear(
