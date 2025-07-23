@@ -64,6 +64,7 @@ fn can_embed_payload<P1: AsRef<[u8]>, P2: AsRef<[u8]>>(png_data: P1, payload: P2
 
 proptest! {
     /// Core property: embed then extract should preserve payload data
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn roundtrip_preserves_payload(
           png_data in png_strategy(),
@@ -86,6 +87,7 @@ proptest! {
       }
 
     /// Property: linear embedding is deterministic
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn linear_embedding_is_deterministic(
         payload in prop::collection::vec(any::<u8>(), 1..10)
@@ -102,6 +104,7 @@ proptest! {
     }
 
     /// Property: XOR obfuscation changes the result
+    #[cfg_attr(tarpaulin, ignore)]
     #[test]
     fn xor_obfuscation_changes_result(
         payload in prop::collection::vec(any::<u8>(), 1..4)

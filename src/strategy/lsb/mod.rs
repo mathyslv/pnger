@@ -964,8 +964,13 @@ impl LSBEmbedder {
 
         let header_bytes_used = header::HeaderEmbedder::new(header_data, runtime_config.clone())
             .embed(payload.len() as u32)?;
-        BodyEmbedder::new(body_data, &runtime_config.pattern, runtime_config.bit_index)
-            .embed_payload(payload);
+        BodyEmbedder::new(
+            body_data,
+            &runtime_config.pattern,
+            runtime_config.bit_index,
+            payload.len(),
+        )
+        .embed_payload(payload);
 
         Ok(EmbedResult {
             bytes_used: header_bytes_used + (payload.len() * 8),
@@ -1052,7 +1057,12 @@ impl LSBEmbedder {
 
         // Phase 4: Extract payload using runtime config
         let body_data = &mut image_data[header_size..];
-        let mut body_embedder = BodyEmbedder::new(body_data, &runtime_pattern, config.bit_index);
+        let mut body_embedder = BodyEmbedder::new(
+            body_data,
+            &runtime_pattern,
+            config.bit_index,
+            fixed_header.payload_size as _,
+        );
         let payload = body_embedder.extract_payload(complete_header.fixed.payload_size as usize);
 
         Ok(ExtractResult {

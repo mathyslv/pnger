@@ -12,14 +12,14 @@ pub(super) struct BodyEmbedder<'a> {
 }
 
 impl<'a> BodyEmbedder<'a> {
-    pub fn new(bytes: &'a mut [u8], pattern: &RuntimePattern, bit_index: BitIndex) -> Self {
+    pub fn new(bytes: &'a mut [u8], pattern: &RuntimePattern, bit_index: BitIndex, payload_len: usize) -> Self {
         let mut ordered_indices: Vec<u32> = (0..bytes.len()).map(|i| i as u32).collect();
         let indices = match &pattern {
             RuntimePattern::Linear => ordered_indices,
             RuntimePattern::Random { seed, .. } => {
                 let mut rng = rand_chacha::ChaCha20Rng::from_seed(*seed);
-                ordered_indices.shuffle(&mut rng);
-                ordered_indices
+                let (shuffled, _) = ordered_indices.partial_shuffle(&mut rng, payload_len * 8);
+                shuffled.to_vec()
             }
         };
 
@@ -59,8 +59,6 @@ impl<'a> BodyEmbedder<'a> {
 
             let image_index = self.indices[self.index] as usize;
             let bit = (byte >> bit_pos) & 1;
-
-            // Embed bit using utils::embed_bit
             self.bytes[image_index] = embed_bit(target_bit, self.bytes[image_index], bit);
             self.index += 1;
         }
@@ -79,7 +77,6 @@ impl<'a> BodyEmbedder<'a> {
 
             let image_index = self.indices[self.index] as usize;
             let bit = extract_bit(target_bit, self.bytes[image_index]);
-
             byte |= (bit & 1) << bit_pos;
             self.index += 1;
         }
