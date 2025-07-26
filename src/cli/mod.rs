@@ -20,7 +20,7 @@ pub enum StrategyArg {
 
 #[derive(Parser)]
 #[command(name = "pnger")]
-#[command(version = "0.1.0")]
+#[command(version = "0.1.3")]
 #[command(about = "A cross-platform tool for embedding & extracting payloads within PNG files")]
 #[command(after_help = "Examples:
     # Embed payload.json into image.png and save to output.png

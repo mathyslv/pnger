@@ -26,14 +26,14 @@ A cross-platform command-line tool for embedding payloads within PNG files using
 ```bash
 git clone https://github.com/mathyslv/pnger.git
 cd pnger
-cargo build --release
+cargo build --release --features bin
 ```
 
 The binary will be available at `target/release/pnger`.
 
 ### Using Cargo
 ```bash
-cargo install pnger
+cargo install pnger --features bin
 ```
 
 ## Usage
@@ -45,7 +45,7 @@ Embed payload.json into image.png and save to output.png:
 pnger -i image.png -p payload.json -o output.png
 ```
 
-Use explicit LSB strategy:
+Use explicit LSB strategy (default, so optional):
 ```bash
 pnger -i image.png -p payload.bin -o output.png --strategy lsb
 ```
@@ -132,8 +132,8 @@ Available strategies:
   lsb    Least Significant Bit embedding
 
 Available LSB patterns:
-  linear    Sequential bit embedding
-  random    Pseudo-random bit embedding (default)
+  linear    Linear pattern (sequential)
+  random    Random pattern (pseudo-random) [default: random]
 ```
 
 ## Library Usage
@@ -193,7 +193,7 @@ PNGer uses steganography to hide data within PNG images by modifying the least s
 
 ## Requirements
 
-- Rust 1.70 or higher
+- Rust 1.85.1 or higher
 - Valid PNG input files
 
 ## Contributing
