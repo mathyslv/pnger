@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   test:
@@ -20,27 +21,120 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          components: rustfmt, clippy
 
+      # More efficient caching strategy
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Cache based on both Cargo.lock and Cargo.toml
+          key: "ci-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}"
+          # Save space by cleaning up old artifacts
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Add timeout to prevent hanging tests
       - name: Run tests
-        run: cargo test --all-features
+        timeout-minutes: 20
+        run: |
+          echo "::group::Running library tests"
+          cargo test --lib --all-features
+          echo "::endgroup::"
+          
+          echo "::group::Running binary tests"
+          cargo test --bin pnger --features bin
+          echo "::endgroup::"
+          
+          echo "::group::Running integration tests"
+          cargo test --test '*' --all-features
+          echo "::endgroup::"
 
-      - name: Run clippy
-        run: cargo clippy --all-features -- -D warnings
-
+      # Format check with better error reporting
       - name: Check formatting
-        run: cargo fmt --check
+        run: |
+          if ! cargo fmt --check; then
+            echo "::error::Code formatting issues found. Run 'cargo fmt' to fix."
+            echo "::group::Formatting diff"
+            cargo fmt --check --verbose 2>&1 || true
+            echo "::endgroup::"
+            exit 1
+          fi
 
-      - name: Build release
-        run: cargo build --release
+      # Clippy with comprehensive linting
+      - name: Run clippy
+        run: |
+          echo "::group::Library clippy"
+          cargo clippy --lib --all-features -- -D warnings -D clippy::all
+          echo "::endgroup::"
+          
+          echo "::group::Binary clippy" 
+          cargo clippy --bin pnger --features bin -- -D warnings -D clippy::all
+          echo "::endgroup::"
 
-      - name: Test dry run publish
-        run: cargo publish --dry-run
+      # Separate build steps with proper feature flags
+      - name: Build library
+        run: cargo build --lib --all-features
+
+      - name: Build binary
+        run: cargo build --bin pnger --features bin --release
+
+      # Test that the binary actually works
+      - name: Test binary functionality
+        run: |
+          # Create a simple test image
+          echo "Creating test assets..."
+          mkdir -p test_assets
+          
+          # Create a test payload
+          echo "Hello, CI test!" > test_assets/payload.txt
+          
+          # Try to embed and extract (requires an actual PNG)
+          if command -v convert >/dev/null 2>&1; then
+            convert -size 50x50 xc:white test_assets/test.png
+            echo "::group::Testing embed/extract workflow"
+            ./target/release/pnger -i test_assets/test.png -p test_assets/payload.txt -o test_assets/output.png
+            ./target/release/pnger -x -i test_assets/output.png -o test_assets/extracted.txt
+            diff test_assets/payload.txt test_assets/extracted.txt
+            echo "::endgroup::"
+          else
+            echo "ImageMagick not available, skipping binary integration test"
+          fi
+
+      # Dry run publish to catch packaging issues early
+      - name: Test packaging
+        run: cargo publish --dry-run --all-features
+
+      # Check documentation builds
+      - name: Check documentation
+        run: |
+          echo "::group::Building documentation"
+          RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
+          echo "::endgroup::"
+
+  # Add a security check job
+  security:
+    name: Security Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+      # Optional: Add cargo-deny for more comprehensive checks
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Run cargo-deny
+        run: cargo deny check
+        continue-on-error: true  # Don't fail CI if deny.toml doesn't exist yet

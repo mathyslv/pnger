@@ -6,8 +6,8 @@
 //! 3. Deterministic: same inputs produce same outputs
 
 use pnger::{
-    embed_payload_from_bytes_with_options, extract_payload_from_bytes_with_options,
-    EmbeddingOptions,
+    EmbeddingOptions, embed_payload_from_bytes_with_options,
+    extract_payload_from_bytes_with_options,
 };
 use proptest::prelude::*;
 

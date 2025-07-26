@@ -12,7 +12,12 @@ pub(super) struct BodyEmbedder<'a> {
 }
 
 impl<'a> BodyEmbedder<'a> {
-    pub fn new(bytes: &'a mut [u8], pattern: &RuntimePattern, bit_index: BitIndex, payload_len: usize) -> Self {
+    pub fn new(
+        bytes: &'a mut [u8],
+        pattern: &RuntimePattern,
+        bit_index: BitIndex,
+        payload_len: usize,
+    ) -> Self {
         let mut ordered_indices: Vec<u32> = (0..bytes.len()).map(|i| i as u32).collect();
         let indices = match &pattern {
             RuntimePattern::Linear => ordered_indices,
@@ -51,11 +56,12 @@ impl<'a> BodyEmbedder<'a> {
         let target_bit = self.target_bit_index;
 
         for bit_pos in 0..8 {
-            assert!((self.index < self.indices.len()), 
-                    "LSB index {} is out of bounds (max: {}). Payload too large for available capacity.",
-                    self.index,
-                    self.indices.len()
-                );
+            assert!(
+                (self.index < self.indices.len()),
+                "LSB index {} is out of bounds (max: {}). Payload too large for available capacity.",
+                self.index,
+                self.indices.len()
+            );
 
             let image_index = self.indices[self.index] as usize;
             let bit = (byte >> bit_pos) & 1;
@@ -69,11 +75,12 @@ impl<'a> BodyEmbedder<'a> {
         let mut byte = 0u8;
 
         for bit_pos in 0..8 {
-            assert!((self.index < self.indices.len()), 
-                    "LSB index {} is out of bounds (max: {}). Extraction beyond available data.",
-                    self.index,
-                    self.indices.len()
-                );
+            assert!(
+                (self.index < self.indices.len()),
+                "LSB index {} is out of bounds (max: {}). Extraction beyond available data.",
+                self.index,
+                self.indices.len()
+            );
 
             let image_index = self.indices[self.index] as usize;
             let bit = extract_bit(target_bit, self.bytes[image_index]);

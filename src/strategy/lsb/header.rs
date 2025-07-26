@@ -4,8 +4,8 @@ use std::io::{Cursor, Read, Write};
 use thiserror::Error;
 
 use crate::{
-    strategy::lsb::{RuntimeConfig, RuntimePattern, SEED_SIZE},
     PayloadSize, PngerError,
+    strategy::lsb::{RuntimeConfig, RuntimePattern, SEED_SIZE},
 };
 
 #[derive(Debug, Error)]
