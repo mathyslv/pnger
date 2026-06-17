@@ -50,7 +50,7 @@ argon2 = "0.5.3"
 binrw = "0.15"
 bitflags = "2.9.1"
 crc32fast = "1.4"
-getrandom = "0.3.3"
+getrandom = "0.4.0"
 log = { version = "0.4.27", features = ["kv"], optional = true }
 png = "0.17.16"
 rand = "0.9.2"
